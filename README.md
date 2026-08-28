@@ -83,8 +83,8 @@ builds a production bundle.
 
 ### Package a standalone executable (pkg)
 
-Build a self-contained binary that runs on machines without Node installed. It
-starts the server on port 8080 and opens your browser.
+Build a self-contained binary that runs on machines without Node installed.
+It bundles the whole app (server + static assets) into a single file.
 
 ```bash
 npm run package
@@ -93,13 +93,39 @@ npm run package
 This runs `build:standalone` (a `node-server` Nitro build) and then `pkg .` to
 produce, in `dist/`:
 
-- `app-builder-workspace-win.exe`
-- `app-builder-workspace-macos`
-- `app-builder-workspace-linux`
+- `app-builder-workspace-win.exe`  (Windows)
+- `app-builder-workspace-macos`    (macOS)
+- `app-builder-workspace-linux`    (Linux)
 
 To build a single target instead, use `npx pkg . --targets <triple>` (for
-example `node22-win-x64`). The launcher honours `PORT` (default 8080) and skips
-opening the browser when `YOMI_NO_BROWSER=1`.
+example `node22-win-x64`).
+
+#### Run the packaged app
+
+No Node, npm, or setup required — the binary is fully self-contained.
+
+- **Windows**: double-click `app-builder-workspace-win.exe`, or run it from a
+  terminal.
+- **macOS**: double-click `app-builder-workspace-macos`, or run
+  `./app-builder-workspace-macos`.
+- **Linux**: `chmod +x app-builder-workspace-linux` once, then
+  `./app-builder-workspace-linux`.
+
+It starts the server on `http://localhost:8080` and opens your browser. Supply
+your xAI key in the UI as usual — it is stored in the browser, never in the
+binary.
+
+Options (environment variables):
+
+- `PORT=8080` — change the port (default 8080).
+- `YOMI_NO_BROWSER=1` — start the server without opening the browser.
+
+Stop it with `Ctrl+C` in the terminal (or close the console window). If nothing
+happens on double-click, run it from a terminal to see any error.
+
+First-run notes: Windows SmartScreen and macOS Gatekeeper may warn about an
+unsigned binary — on macOS right-click → Open (or `xattr -d com.apple.quarantine
+app-builder-workspace-macos`) to allow it.
 
 ## Privacy and use
 
