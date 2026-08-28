@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Shippori Mincho", "Noto Serif JP", "Yu Mincho", serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --color-bg: var(--yomi-bg);
+  --color-bg-warm: var(--yomi-bg-warm);
+  --color-surface: var(--yomi-surface);
+  --color-surface-inset: var(--yomi-surface-inset);
+  --color-fg: var(--yomi-fg);
+  --color-muted: var(--yomi-muted);
+  --color-subtle: var(--yomi-subtle);
+  --color-accent: var(--yomi-accent);
+  --color-accent-hover: var(--yomi-accent-hover);
+  --color-accent-fg: var(--yomi-accent-fg);
+  --color-border: var(--yomi-border);
+  --color-border-strong: var(--yomi-border-strong);
+  --color-danger: var(--yomi-danger);
+  --color-danger-bg: var(--yomi-danger-bg);
+  --color-ring: var(--yomi-ring);
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
+
+  --shadow-border: var(--yomi-shadow);
+}
+
+:root {
+  color-scheme: light;
+  --yomi-bg: #f3efe6;
+  --yomi-bg-warm: #ebe4d6;
+  --yomi-surface: #fffdf8;
+  --yomi-surface-inset: #e7e0d2;
+  --yomi-fg: #1c1b18;
+  --yomi-muted: #6f6a60;
+  --yomi-subtle: #8c867a;
+  --yomi-accent: #2c4a5c;
+  --yomi-accent-hover: #243d4c;
+  --yomi-accent-fg: #f3efe6;
+  --yomi-border: #d9d1c3;
+  --yomi-border-strong: #c4bbaa;
+  --yomi-danger: #8f2d2d;
+  --yomi-danger-bg: #f3e4e0;
+  --yomi-ring: #2c4a5c;
+  --yomi-shadow:
+    0px 0px 0px 1px rgba(28, 27, 24, 0.06),
+    0px 1px 2px -1px rgba(28, 27, 24, 0.06),
+    0px 2px 4px 0px rgba(28, 27, 24, 0.04);
+}
+
+.dark {
+  color-scheme: dark;
+  --yomi-bg: #141210;
+  --yomi-bg-warm: #1c1a17;
+  --yomi-surface: #1f1c19;
+  --yomi-surface-inset: #0e0d0b;
+  --yomi-fg: #f3efe6;
+  --yomi-muted: #b0aaa0;
+  --yomi-subtle: #8a847a;
+  --yomi-accent: #c5d4dc;
+  --yomi-accent-hover: #dbe4e9;
+  --yomi-accent-fg: #141210;
+  --yomi-border: #3a352e;
+  --yomi-border-strong: #524c43;
+  --yomi-danger: #e8b4b0;
+  --yomi-danger-bg: #3a2220;
+  --yomi-ring: #c5d4dc;
+  --yomi-shadow: 0 0 0 1px rgba(243, 239, 230, 0.08);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html,
+  body {
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background: var(--color-bg);
+    color: var(--color-fg);
+  }
+
+  body {
+    font-family: var(--font-sans);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  textarea {
+    field-sizing: content;
+  }
+}
+
+@layer utilities {
+  .stage-frame {
+    min-height: min(52vh, 30rem);
+  }
+
+  .stage-wrap {
+    min-height: 20rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

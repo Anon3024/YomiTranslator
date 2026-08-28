@@ -1,0 +1,19 @@
+Notes.md
+
+# deps & build output
+node_modules/
+.output/
+dist/
+.vercel/output/
+.tanstack/
+
+# Grok builder runtime artifacts (keep app-env.json + skills/references)
+.grok/preview.log
+.grok/preview.pid
+.grok/status
+.grok/og-pending
+
+# QA / generated assets
+screenshots/*
+!screenshots/.gitkeep
+artifacts/

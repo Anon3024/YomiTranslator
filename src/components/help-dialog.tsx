@@ -1,0 +1,102 @@
+import { CircleHelp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+
+export function HelpDialog() {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="How to use Yomi">
+          <CircleHelp />
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogTitle>How to use Yomi</DialogTitle>
+        <DialogDescription>
+          Transcribe Japanese from a photo, then edit or translate line by line.
+        </DialogDescription>
+        <div className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 text-sm leading-relaxed text-fg">
+          <section className="space-y-1">
+            <h3 className="font-medium">Add pages</h3>
+            <p className="text-muted">
+              Drop files, paste with Ctrl+V / Cmd+V, choose an image, or load a
+              URL. Add several pages, then move with the arrows or the left and
+              right keys.
+            </p>
+          </section>
+          <section className="space-y-1">
+            <h3 className="font-medium">Re-order pages</h3>
+            <p className="text-muted">
+              Re-order pages switches the photo to a grid. Drag a page, or use
+              its arrows. Regions cannot be drawn in this view. Done returns to
+              the current page.
+            </p>
+          </section>
+          <section className="space-y-1">
+            <h3 className="font-medium">Download images</h3>
+            <p className="text-muted">
+              Saves every page as a zip: 1.png, 2.png, and so on, in the
+              current order.
+            </p>
+          </section>
+          <section className="space-y-1">
+            <h3 className="font-medium">Read a region</h3>
+            <p className="text-muted">
+              Region is the default tool. Drag a box over one balloon or line,
+              then Transcribe. Repeat for the next region — each one becomes
+              its own line. Pan with the Pan tool, Shift-drag, or the middle
+              mouse button. Scroll over the photo to zoom; that does not scroll
+              the page.
+            </p>
+          </section>
+          <section className="space-y-1">
+            <h3 className="font-medium">Lines and SFX</h3>
+            <p className="text-muted">
+              Dialogue stays a Line. Signs, tattoos, background text, and sound
+              effects can be marked SFX so they export in a separate section.
+            </p>
+          </section>
+          <section className="space-y-1">
+            <h3 className="font-medium">Translate</h3>
+            <p className="text-muted">
+              Translate one line, or Translate page for every empty line.
+              Clicking Translate on more lines while one is running adds them
+              to a queue — they run one after another. The English box is
+              always editable.
+            </p>
+          </section>
+          <section className="space-y-1">
+            <h3 className="font-medium">Custom wording</h3>
+            <p className="text-muted">
+              Click a word in the English line for alternatives, or type your
+              own name, term, or phrasing. Only that phrase is saved to the
+              dictionary, not the whole line. Later translations reuse it.
+            </p>
+          </section>
+          <section className="space-y-1">
+            <h3 className="font-medium">Dictionary</h3>
+            <p className="text-muted">
+              Phrase → replacement pairs live in this browser. Add Japanese
+              names or English terms by hand. Export writes every page as
+              Markdown.
+            </p>
+          </section>
+          <section className="space-y-1">
+            <h3 className="font-medium">About the AI</h3>
+            <p className="text-muted">
+              Paste your own xAI API key. Yomi never ships one. The key stays
+              in this browser and is used only for transcribe and translate.
+              Removing it forgets it on this device.
+            </p>
+          </section>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
