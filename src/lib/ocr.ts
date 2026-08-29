@@ -1,8 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
-  REJECTED_TRANSLATION,
   type OcrResult,
   type TranslateResult,
+  type TranslatorId,
 } from "./types";
 
 type FnResult<T> =
@@ -105,6 +105,100 @@ function readUserApiKey(raw: unknown): string {
     throw new Error("That API key looks invalid.");
   }
   return key;
+}
+
+function readDeeplKey(raw: unknown): string {
+  const key = typeof raw === "string" ? raw.trim() : "";
+  if (!key) {
+    throw new Error("Add a DeepL API key first.");
+  }
+  if (key.length < 16 || key.length > 80 || /\s/.test(key)) {
+    throw new Error("That DeepL key looks invalid.");
+  }
+  return key;
+}
+
+function deeplEndpoints(key: string): string[] {
+  const free = "https://api-free.deepl.com/v2/translate";
+  const pro = "https://api.deepl.com/v2/translate";
+  return key.toLowerCase().endsWith(":fx") ? [free, pro] : [pro, free];
+}
+
+type DeeplResponse = {
+  translations?: Array<{ text?: string }>;
+  message?: string;
+};
+
+async function deeplTranslate(
+  apiKey: string,
+  texts: string[],
+): Promise<FnResult<string[]>> {
+  const endpoints = deeplEndpoints(apiKey);
+  let lastError = "DeepL translation failed.";
+
+  for (const url of endpoints) {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `DeepL-Auth-Key ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: texts,
+          source_lang: "JA",
+          target_lang: "EN-US",
+        }),
+        signal: AbortSignal.timeout(60_000),
+      });
+    } catch {
+      lastError = "Could not reach DeepL. Try again.";
+      continue;
+    }
+
+    let body: DeeplResponse | null = null;
+    try {
+      body = (await res.json()) as DeeplResponse;
+    } catch {
+      body = null;
+    }
+
+    if (res.status === 403) {
+      lastError = "That DeepL key was rejected. Check it under API keys.";
+      continue;
+    }
+    if (res.status === 456) {
+      return {
+        ok: false,
+        error: "DeepL quota is used up for this billing period.",
+      };
+    }
+    if (res.status === 429) {
+      return {
+        ok: false,
+        error: "DeepL is rate-limiting. Wait a moment and try again.",
+      };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: body?.message
+          ? `DeepL: ${body.message}`
+          : `DeepL error (${res.status}).`,
+      };
+    }
+
+    const translations = Array.isArray(body?.translations)
+      ? body.translations.map((row) => String(row?.text ?? "").trim())
+      : [];
+    if (translations.length !== texts.length || translations.some((t) => !t)) {
+      return { ok: false, error: "DeepL returned an empty translation." };
+    }
+    return { ok: true, data: translations };
+  }
+
+  return { ok: false, error: lastError };
 }
 
 function extractJson(text: string): unknown {
@@ -364,20 +458,44 @@ export const transcribeImage = createServerFn({ method: "POST" })
 
 export const translateText = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
-    const data = input as { text?: string; glossary?: unknown; apiKey?: string };
+    const data = input as {
+      text?: string;
+      glossary?: unknown;
+      apiKey?: string;
+      deeplKey?: string;
+      provider?: string;
+    };
     if (!data?.text || typeof data.text !== "string") {
       throw new Error("Missing text");
     }
     const text = data.text.trim();
     if (!text) throw new Error("Nothing to translate.");
     if (text.length > 8000) throw new Error("Text is too long to translate.");
+    const provider: TranslatorId =
+      data.provider === "deepl" ? "deepl" : "grok";
+    if (provider === "deepl") {
+      return {
+        text,
+        glossary: sanitizeGlossary(data.glossary),
+        provider,
+        apiKey: "",
+        deeplKey: readDeeplKey(data.deeplKey),
+      };
+    }
     return {
       text,
       glossary: sanitizeGlossary(data.glossary),
+      provider,
       apiKey: readUserApiKey(data.apiKey),
+      deeplKey: "",
     };
   })
   .handler(async ({ data }): Promise<FnResult<TranslateResult>> => {
+    if (data.provider === "deepl") {
+      const out = await deeplTranslate(data.deeplKey, [data.text]);
+      if (!out.ok) return out;
+      return { ok: true, data: { translation: out.data[0] } };
+    }
     const grok = await grokChat({
       apiKey: data.apiKey,
       max_tokens: 1600,
@@ -393,12 +511,7 @@ ${data.text}`,
         },
       ],
     });
-    if (!grok.ok) {
-      if (grok.declined) {
-        return { ok: true, data: { translation: REJECTED_TRANSLATION } };
-      }
-      return grok;
-    }
+    if (!grok.ok) return grok;
     try {
       const parsed = extractJson(grok.data) as {
         translation?: unknown;
@@ -422,6 +535,8 @@ export const translateEntries = createServerFn({ method: "POST" })
       items?: { id?: string; text?: string }[];
       glossary?: unknown;
       apiKey?: string;
+      deeplKey?: string;
+      provider?: string;
     };
     if (!Array.isArray(data?.items) || data.items.length === 0) {
       throw new Error("Nothing to translate.");
@@ -434,16 +549,45 @@ export const translateEntries = createServerFn({ method: "POST" })
       }))
       .filter((item) => item.id && item.text);
     if (items.length === 0) throw new Error("Nothing to translate.");
+    const provider: TranslatorId =
+      data.provider === "deepl" ? "deepl" : "grok";
+    if (provider === "deepl") {
+      return {
+        items,
+        glossary: sanitizeGlossary(data.glossary),
+        provider,
+        apiKey: "",
+        deeplKey: readDeeplKey(data.deeplKey),
+      };
+    }
     return {
       items,
       glossary: sanitizeGlossary(data.glossary),
+      provider,
       apiKey: readUserApiKey(data.apiKey),
+      deeplKey: "",
     };
   })
   .handler(
     async ({
       data,
     }): Promise<FnResult<{ items: { id: string; translation: string }[] }>> => {
+      if (data.provider === "deepl") {
+        const out = await deeplTranslate(
+          data.deeplKey,
+          data.items.map((item) => item.text),
+        );
+        if (!out.ok) return out;
+        return {
+          ok: true,
+          data: {
+            items: data.items.map((item, i) => ({
+              id: item.id,
+              translation: out.data[i] ?? "",
+            })),
+          },
+        };
+      }
       const grok = await grokChat({
         apiKey: data.apiKey,
         max_tokens: 2500,
@@ -459,20 +603,7 @@ ${JSON.stringify(data.items)}`,
           },
         ],
       });
-      if (!grok.ok) {
-        if (grok.declined) {
-          return {
-            ok: true,
-            data: {
-              items: data.items.map((item) => ({
-                id: item.id,
-                translation: REJECTED_TRANSLATION,
-              })),
-            },
-          };
-        }
-        return grok;
-      }
+      if (!grok.ok) return grok;
       try {
         const parsed = extractJson(grok.data) as {
           items?: { id?: string; translation?: string }[];

@@ -28,12 +28,12 @@ import {
   toMarkdown,
 } from "@/lib/pages";
 import {
-  REJECTED_TRANSLATION,
   type EntryKind,
   type LineEntry,
   type Page,
   type Rect,
   type Tool,
+  type TranslatorId,
 } from "@/lib/types";
 import {
   applyGlossary,
@@ -44,7 +44,14 @@ import {
   type GlossaryRecord,
 } from "@/lib/glossary";
 import { applyTheme, readTheme, type Theme } from "@/lib/theme";
-import { loadApiKey, saveApiKey } from "@/lib/api-key";
+import {
+  loadApiKey,
+  loadDeeplKey,
+  loadTranslator,
+  saveApiKey,
+  saveDeeplKey,
+  saveTranslator,
+} from "@/lib/api-key";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -63,6 +70,8 @@ function Home() {
   const [theme, setThemeState] = useState<Theme>("light");
   const [queueIds, setQueueIds] = useState<string[]>([]);
   const [apiKey, setApiKeyState] = useState(loadApiKey);
+  const [deeplKey, setDeeplKeyState] = useState(loadDeeplKey);
+  const [translator, setTranslatorState] = useState<TranslatorId>(loadTranslator);
   const [view, setView] = useState<"page" | "reorder">("page");
   const [downloading, setDownloading] = useState(false);
   const glossaryRef = useRef(glossary);
@@ -71,10 +80,31 @@ function Home() {
   const drainingRef = useRef(false);
   const apiKeyRef = useRef(apiKey);
   apiKeyRef.current = apiKey;
+  const deeplKeyRef = useRef(deeplKey);
+  deeplKeyRef.current = deeplKey;
+  const translatorRef = useRef(translator);
+  translatorRef.current = translator;
 
   const setApiKey = useCallback((value: string) => {
     saveApiKey(value);
     setApiKeyState(value);
+  }, []);
+
+  const setDeeplKey = useCallback((value: string) => {
+    saveDeeplKey(value);
+    setDeeplKeyState(value);
+    if (!value.trim() && translatorRef.current === "deepl") {
+      saveTranslator("grok");
+      setTranslatorState("grok");
+    } else if (value.trim() && !apiKeyRef.current) {
+      saveTranslator("deepl");
+      setTranslatorState("deepl");
+    }
+  }, []);
+
+  const setTranslator = useCallback((next: TranslatorId) => {
+    saveTranslator(next);
+    setTranslatorState(next);
   }, []);
 
   useEffect(() => {
@@ -345,7 +375,13 @@ function Home() {
   }, [pageIndex]);
 
   const enqueueTranslate = useCallback((ids: string[]) => {
-    if (!apiKeyRef.current) {
+    const provider = translatorRef.current;
+    if (provider === "deepl") {
+      if (!deeplKeyRef.current) {
+        setError("Add a DeepL API key first, or switch to Grok.");
+        return;
+      }
+    } else if (!apiKeyRef.current) {
       setError("Add your xAI API key first.");
       return;
     }
@@ -407,25 +443,19 @@ function Home() {
               text: entry.japanese,
               glossary: glossaryPayload(glossaryRef.current),
               apiKey: apiKeyRef.current,
+              deeplKey: deeplKeyRef.current,
+              provider: translatorRef.current,
             },
           });
           if (!res.ok) {
-            if (res.declined) {
-              patch(id, { english: REJECTED_TRANSLATION });
-            } else {
-              setError(res.error);
-            }
+            setError(res.error);
           } else {
-            const translation = res.data.translation.trim();
             patch(id, {
-              english:
-                translation === REJECTED_TRANSLATION
-                  ? REJECTED_TRANSLATION
-                  : applyGlossary(
-                      entry.japanese,
-                      translation,
-                      glossaryRef.current,
-                    ),
+              english: applyGlossary(
+                entry.japanese,
+                res.data.translation,
+                glossaryRef.current,
+              ),
               notes: res.data.notes,
             });
           }
@@ -693,6 +723,11 @@ function Home() {
             apiKey={apiKey}
             onSave={setApiKey}
             onClear={() => setApiKey("")}
+            deeplKey={deeplKey}
+            onSaveDeepl={setDeeplKey}
+            onClearDeepl={() => setDeeplKey("")}
+            translator={translator}
+            onTranslator={setTranslator}
           />
           <ThemeToggle
             theme={theme}
@@ -761,6 +796,10 @@ function Home() {
           onForget={(id) =>
             setGlossary((prev) => prev.filter((row) => row.id !== id))
           }
+          translator={translator}
+          grokReady={Boolean(apiKey)}
+          deeplReady={Boolean(deeplKey)}
+          onTranslator={setTranslator}
         />
       </div>
     </div>

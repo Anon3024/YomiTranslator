@@ -18,7 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { entriesOf, tokenizeEnglish } from "@/lib/pages";
 import { customsFor, type GlossaryRecord } from "@/lib/glossary";
-import type { EntryKind, LineEntry, Page } from "@/lib/types";
+import { TranslatorToggle } from "@/components/translator-toggle";
+import type { EntryKind, LineEntry, Page, TranslatorId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type AltState = {
@@ -55,6 +56,10 @@ type Props = {
   glossary: GlossaryRecord[];
   onRemember: (input: { from: string; to: string }) => void;
   onForget: (id: string) => void;
+  translator: TranslatorId;
+  grokReady: boolean;
+  deeplReady: boolean;
+  onTranslator: (next: TranslatorId) => void;
 };
 
 export function TranscriptPanel({
@@ -78,6 +83,10 @@ export function TranscriptPanel({
   glossary,
   onRemember,
   onForget,
+  translator,
+  grokReady,
+  deeplReady,
+  onTranslator,
 }: Props) {
   const [alt, setAlt] = useState<AltState | null>(null);
   const [lookup, setLookup] = useState("");
@@ -187,6 +196,19 @@ export function TranscriptPanel({
           </Button>
         </div>
       </header>
+
+      {deeplReady ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-muted">Translate with</p>
+          <TranslatorToggle
+            value={translator}
+            onChange={onTranslator}
+            grokReady={grokReady}
+            deeplReady={deeplReady}
+            size="sm"
+          />
+        </div>
+      ) : null}
 
       {error ? (
         <p className="rounded-md bg-danger-bg px-3 py-2 text-sm text-danger">
