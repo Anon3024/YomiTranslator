@@ -27,7 +27,14 @@ import {
   downloadMarkdown,
   toMarkdown,
 } from "@/lib/pages";
-import type { EntryKind, LineEntry, Page, Rect, Tool } from "@/lib/types";
+import {
+  REJECTED_TRANSLATION,
+  type EntryKind,
+  type LineEntry,
+  type Page,
+  type Rect,
+  type Tool,
+} from "@/lib/types";
 import {
   applyGlossary,
   glossaryPayload,
@@ -403,14 +410,22 @@ function Home() {
             },
           });
           if (!res.ok) {
-            setError(res.error);
+            if (res.declined) {
+              patch(id, { english: REJECTED_TRANSLATION });
+            } else {
+              setError(res.error);
+            }
           } else {
+            const translation = res.data.translation.trim();
             patch(id, {
-              english: applyGlossary(
-                entry.japanese,
-                res.data.translation,
-                glossaryRef.current,
-              ),
+              english:
+                translation === REJECTED_TRANSLATION
+                  ? REJECTED_TRANSLATION
+                  : applyGlossary(
+                      entry.japanese,
+                      translation,
+                      glossaryRef.current,
+                    ),
               notes: res.data.notes,
             });
           }

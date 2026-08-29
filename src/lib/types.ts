@@ -42,3 +42,7 @@ export type Page = {
   selection: Rect | null;
   entries: LineEntry[];
 };
+
+/** English line written when the model declines a translation. */
+export const REJECTED_TRANSLATION =
+  "Translation Rejected. Use another translator application.";
