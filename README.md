@@ -18,7 +18,8 @@ It does **not** ship an API key. You paste your own [xAI](https://docs.x.ai) key
 - Translate one line or queue a whole page. Calls run one after another
 - Optional DeepL key: switch Translate between Grok and DeepL
 - Click a word in the English for alternatives, or type a custom phrasing
-- Phrase dictionary stored in this browser (term → replacement, not the whole line)
+- Phrase dictionary stored with the current project (term → replacement, not the whole line)
+- Name, save, and load projects as a zip folder (images, translations, dictionary)
 - Export a Markdown file of every page (original + translation, lines and SFX)
 - Download the images as `yomi-pages.zip` (`1.png`, `2.png`, … in current order)
 - Light and dark theme
@@ -42,6 +43,17 @@ Transcription will not run without an xAI key.
 3. A **Translate with** control appears (Grok or DeepL). The same switch is on the transcript panel.
 
 DeepL is used only for Translate / Translate page. Word alternatives still use Grok. Removing the DeepL key switches translation back to Grok.
+
+## Projects
+
+A project is one Yomi session: the page images, in-progress translations, and that project’s dictionary. API keys and theme stay in the browser and are reused.
+
+1. Open the folder icon. Name the project.
+2. **Save** downloads a zip folder (`Name.zip`) with `project.json` and `images/`.
+3. **Load** opens a previously saved zip (you can also drop the zip on the page).
+4. **New** clears pages and the dictionary and starts an Untitled project.
+
+The dictionary is not shared between projects.
 
 ## How to use
 
@@ -141,7 +153,7 @@ app-builder-workspace-macos`) to allow it.
 ## Privacy and use
 
 - Images stay in this session. They are not uploaded to a Yomi server for storage.
-- The dictionary and API keys live in this browser only.
+- The current project’s dictionary and API keys live in this browser only. Saved projects are zip files on your machine.
 - Use only material you have a right to read.
 - Do not upload sexual content involving anyone under 18, including drawings, or intimate images of real people.
 
