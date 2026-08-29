@@ -6,6 +6,7 @@ import { TranscriptPanel } from "@/components/transcript-panel";
 import { HelpDialog } from "@/components/help-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ApiKeyDialog, ApiKeyGate } from "@/components/api-key-dialog";
+import { ProjectDialog } from "@/components/project-dialog";
 import { encodeRegion, looksLikeImageUrl } from "@/lib/image";
 import {
   blobFromDataUrl,
@@ -28,6 +29,7 @@ import {
   toMarkdown,
 } from "@/lib/pages";
 import {
+  REJECTED_TRANSLATION,
   type EntryKind,
   type LineEntry,
   type Page,
@@ -43,6 +45,16 @@ import {
   upsertRecord,
   type GlossaryRecord,
 } from "@/lib/glossary";
+import {
+  DEFAULT_PROJECT_NAME,
+  downloadNameFor,
+  loadProjectName,
+  loadProjectZip,
+  looksLikeProjectFile,
+  saveProjectName,
+  saveProjectZip,
+  sanitizeProjectName,
+} from "@/lib/project";
 import { applyTheme, readTheme, type Theme } from "@/lib/theme";
 import {
   loadApiKey,
@@ -72,18 +84,27 @@ function Home() {
   const [apiKey, setApiKeyState] = useState(loadApiKey);
   const [deeplKey, setDeeplKeyState] = useState(loadDeeplKey);
   const [translator, setTranslatorState] = useState<TranslatorId>(loadTranslator);
+  const [projectName, setProjectNameState] = useState(loadProjectName);
+  const [savingProject, setSavingProject] = useState(false);
   const [view, setView] = useState<"page" | "reorder">("page");
   const [downloading, setDownloading] = useState(false);
   const glossaryRef = useRef(glossary);
   glossaryRef.current = glossary;
   const queueRef = useRef<string[]>([]);
   const drainingRef = useRef(false);
+  const sessionRef = useRef(0);
   const apiKeyRef = useRef(apiKey);
   apiKeyRef.current = apiKey;
   const deeplKeyRef = useRef(deeplKey);
   deeplKeyRef.current = deeplKey;
   const translatorRef = useRef(translator);
   translatorRef.current = translator;
+
+  const setProjectName = useCallback((value: string) => {
+    const name = value.replace(/\s+/g, " ").slice(0, 80);
+    setProjectNameState(name);
+    saveProjectName(sanitizeProjectName(name));
+  }, []);
 
   const setApiKey = useCallback((value: string) => {
     saveApiKey(value);
@@ -129,6 +150,77 @@ function Home() {
     [pageIndex],
   );
 
+  const stopWork = useCallback(() => {
+    sessionRef.current += 1;
+    queueRef.current = [];
+    drainingRef.current = false;
+    setQueueIds([]);
+    setTranslatingId(null);
+    setTranslating(false);
+    setTranscribing(false);
+    setError(null);
+    setView("page");
+    setTool("region");
+  }, []);
+
+  const replaceSession = useCallback(
+    (nextPages: Page[], nextGlossary: GlossaryRecord[], name: string) => {
+      stopWork();
+      for (const item of pagesRef.current) {
+        URL.revokeObjectURL(item.src);
+      }
+      pagesRef.current = nextPages;
+      setPages(nextPages);
+      setPageIndex(
+        Math.max(0, Math.min(nextPages.length - 1, 0)),
+      );
+      setGlossary(nextGlossary);
+      saveGlossary(nextGlossary);
+      setProjectName(name);
+    },
+    [setProjectName, stopWork],
+  );
+
+  const newProject = useCallback(() => {
+    replaceSession([], [], DEFAULT_PROJECT_NAME);
+    toast("New project");
+  }, [replaceSession]);
+
+  const saveProject = useCallback(async () => {
+    setSavingProject(true);
+    try {
+      await saveProjectZip({
+        name: projectName,
+        pages: pagesRef.current,
+        glossary: glossaryRef.current,
+        pageIndex,
+      });
+      toast(`Saved ${downloadNameFor(projectName)}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save.");
+    } finally {
+      setSavingProject(false);
+    }
+  }, [pageIndex, projectName]);
+
+  const loadProjectFile = useCallback(
+    async (file: File) => {
+      const toastId = toast.loading("Loading project…");
+      try {
+        const loaded = await loadProjectZip(file);
+        replaceSession(loaded.pages, loaded.glossary, loaded.name);
+        setPageIndex(loaded.pageIndex);
+        toast.success(`Loaded ${loaded.name}`, { id: toastId });
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Could not load that project.",
+          { id: toastId },
+        );
+      }
+    },
+    [replaceSession],
+  );
+
   const addBlobs = useCallback((blobs: Blob[]) => {
     if (blobs.length === 0) return;
     const next = blobs.map((blob) => createPage(URL.createObjectURL(blob)));
@@ -143,6 +235,11 @@ function Home() {
 
   const addFiles = useCallback(
     (files: File[]) => {
+      const zips = files.filter(looksLikeProjectFile);
+      if (zips.length === 1 && files.length === 1) {
+        void loadProjectFile(zips[0]);
+        return true;
+      }
       const images = files.filter(
         (f) =>
           f.type.startsWith("image/") ||
@@ -156,7 +253,7 @@ function Home() {
       addBlobs(images);
       return true;
     },
-    [addBlobs],
+    [addBlobs, loadProjectFile],
   );
 
   const replaceFile = useCallback(
@@ -415,6 +512,7 @@ function Home() {
   const drainTranslate = useCallback(async () => {
     if (drainingRef.current) return;
     drainingRef.current = true;
+    const epoch = sessionRef.current;
     setTranslating(true);
     setError(null);
     const find = (id: string) => {
@@ -447,25 +545,37 @@ function Home() {
               provider: translatorRef.current,
             },
           });
+          if (sessionRef.current !== epoch) return;
           if (!res.ok) {
-            setError(res.error);
+            if (res.declined) {
+              patch(id, { english: REJECTED_TRANSLATION });
+            } else {
+              setError(res.error);
+            }
           } else {
+            const translation = res.data.translation.trim();
             patch(id, {
-              english: applyGlossary(
-                entry.japanese,
-                res.data.translation,
-                glossaryRef.current,
-              ),
+              english:
+                translation === REJECTED_TRANSLATION
+                  ? REJECTED_TRANSLATION
+                  : applyGlossary(
+                      entry.japanese,
+                      translation,
+                      glossaryRef.current,
+                    ),
               notes: res.data.notes,
             });
           }
         }
       } catch (err) {
+        if (sessionRef.current !== epoch) return;
         setError(err instanceof Error ? err.message : "Translation failed.");
       }
+      if (sessionRef.current !== epoch) return;
       queueRef.current = queueRef.current.slice(1);
       setQueueIds([...queueRef.current]);
     }
+    if (sessionRef.current !== epoch) return;
     setTranslatingId(null);
     setTranslating(false);
     drainingRef.current = false;
@@ -718,6 +828,22 @@ function Home() {
           </p>
         </div>
         <div className="flex items-center gap-2 self-start">
+          <span className="hidden max-w-40 truncate text-sm text-muted sm:inline">
+            {projectName.trim() || DEFAULT_PROJECT_NAME}
+          </span>
+          <ProjectDialog
+            name={projectName}
+            onName={setProjectName}
+            busy={savingProject}
+            hasWork={
+              pages.length > 0 ||
+              glossary.length > 0 ||
+              projectName !== DEFAULT_PROJECT_NAME
+            }
+            onNew={newProject}
+            onSave={saveProject}
+            onLoad={(file) => void loadProjectFile(file)}
+          />
           <HelpDialog />
           <ApiKeyDialog
             apiKey={apiKey}

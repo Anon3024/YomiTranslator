@@ -23,6 +23,16 @@ export function HelpDialog() {
         </DialogDescription>
         <div className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 text-sm leading-relaxed text-fg">
           <section className="space-y-1">
+            <h3 className="font-medium">Projects</h3>
+            <p className="text-muted">
+              The folder icon opens the current project. Name it, then Save to
+              download a zip folder of the pages, translations, and this
+              project’s dictionary. Load opens a saved zip. New starts a blank
+              project. API keys are kept; the dictionary is not shared between
+              projects.
+            </p>
+          </section>
+          <section className="space-y-1">
             <h3 className="font-medium">Add pages</h3>
             <p className="text-muted">
               Drop files, paste with Ctrl+V / Cmd+V, choose an image, or load a
@@ -83,9 +93,9 @@ export function HelpDialog() {
           <section className="space-y-1">
             <h3 className="font-medium">Dictionary</h3>
             <p className="text-muted">
-              Phrase → replacement pairs live in this browser. Add Japanese
-              names or English terms by hand. Export writes every page as
-              Markdown.
+              Phrase → replacement pairs belong to the current project. Add
+              Japanese names or English terms by hand. Export writes every page
+              as Markdown.
             </p>
           </section>
           <section className="space-y-1">

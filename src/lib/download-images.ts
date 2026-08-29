@@ -27,7 +27,7 @@ function rasterToPng(src: string): Promise<Blob> {
   });
 }
 
-async function srcToPngBytes(src: string): Promise<Uint8Array> {
+export async function srcToPngBytes(src: string): Promise<Uint8Array> {
   const res = await fetch(src);
   if (!res.ok) throw new Error("Could not read an image.");
   const blob = await res.blob();
