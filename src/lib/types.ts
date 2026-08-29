@@ -24,6 +24,8 @@ export type TranslateResult = {
   notes?: string;
 };
 
+export type TranslatorId = "grok" | "deepl";
+
 export type Tool = "pan" | "region";
 
 export type EntryKind = "line" | "detail";

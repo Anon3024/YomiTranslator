@@ -67,8 +67,9 @@ export function HelpDialog() {
             <p className="text-muted">
               Translate one line, or Translate page for every empty line.
               Clicking Translate on more lines while one is running adds them
-              to a queue — they run one after another. The English box is
-              always editable.
+              to a queue — they run one after another. If a DeepL key is
+              saved, choose Grok or DeepL with the Translate with control.
+              The English box is always editable.
             </p>
           </section>
           <section className="space-y-1">
@@ -90,9 +91,10 @@ export function HelpDialog() {
           <section className="space-y-1">
             <h3 className="font-medium">About the AI</h3>
             <p className="text-muted">
-              Paste your own xAI API key. Yomi never ships one. The key stays
-              in this browser and is used only for transcribe and translate.
-              Removing it forgets it on this device.
+              Paste your own xAI API key for transcription and Grok
+              translation. Optionally add a DeepL key and switch Translate
+              between Grok and DeepL. Keys stay in this browser. Removing a
+              key forgets it on this device.
             </p>
           </section>
         </div>

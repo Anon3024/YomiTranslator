@@ -6,7 +6,7 @@ Transcribe Japanese from photos, then edit or translate line by line.
 
 Yomi is a local-first page reader for signs, menus, screenshots, and manga panels. You add images, draw a region around the text you care about, get a transcription, and optionally an English translation you can rewrite.
 
-It does **not** ship an API key. You paste your own [xAI](https://docs.x.ai) key once; it stays in this browser.
+It does **not** ship an API key. You paste your own [xAI](https://docs.x.ai) key once for transcription (and Grok translation); it stays in this browser. Optionally add a [DeepL](https://www.deepl.com/pro-api) key and switch translation to DeepL.
 
 ## Features
 
@@ -16,21 +16,32 @@ It does **not** ship an API key. You paste your own [xAI](https://docs.x.ai) key
 - Re-order pages in a grid (drag or arrows). Regions are off in that view
 - Lines vs SFX/detail: dialogue stays a Line; signs, tattoos, and sound effects can be marked SFX
 - Translate one line or queue a whole page. Calls run one after another
+- Optional DeepL key: switch Translate between Grok and DeepL
 - Click a word in the English for alternatives, or type a custom phrasing
 - Phrase dictionary stored in this browser (term → replacement, not the whole line)
 - Export a Markdown file of every page (original + translation, lines and SFX)
 - Download the images as `yomi-pages.zip` (`1.png`, `2.png`, … in current order)
 - Light and dark theme
 
-## Your API key
+## Your API keys
+
+### xAI (required for transcription)
 
 1. Create an API key in your xAI account.
 2. In Yomi, open the key icon (or the **Add your API key** card) and paste it.
 3. Save. Later visits on this device reuse it until you remove it.
 
-The key is stored only in this browser. It is sent only with transcribe, translate, and alternative-word requests. Removing it forgets it on this device.
+The key is stored only in this browser. It is sent only with transcribe, Grok translate, and alternative-word requests. Removing it forgets it on this device.
 
-Transcription and translation will not run without a key.
+Transcription will not run without an xAI key.
+
+### DeepL (optional, translation only)
+
+1. Create an API key in your DeepL API account. Free keys usually end in `:fx`.
+2. Open the key icon, paste it under **DeepL**, and save.
+3. A **Translate with** control appears (Grok or DeepL). The same switch is on the transcript panel.
+
+DeepL is used only for Translate / Translate page. Word alternatives still use Grok. Removing the DeepL key switches translation back to Grok.
 
 ## How to use
 
@@ -130,7 +141,7 @@ app-builder-workspace-macos`) to allow it.
 ## Privacy and use
 
 - Images stay in this session. They are not uploaded to a Yomi server for storage.
-- The dictionary and API key live in this browser only.
+- The dictionary and API keys live in this browser only.
 - Use only material you have a right to read.
 - Do not upload sexual content involving anyone under 18, including drawings, or intimate images of real people.
 
