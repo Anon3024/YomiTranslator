@@ -1,5 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { OcrResult, TranslateResult } from "./types";
+import {
+  REJECTED_TRANSLATION,
+  type OcrResult,
+  type TranslateResult,
+} from "./types";
 
 type FnResult<T> =
   | { ok: true; data: T }
@@ -389,7 +393,12 @@ ${data.text}`,
         },
       ],
     });
-    if (!grok.ok) return grok;
+    if (!grok.ok) {
+      if (grok.declined) {
+        return { ok: true, data: { translation: REJECTED_TRANSLATION } };
+      }
+      return grok;
+    }
     try {
       const parsed = extractJson(grok.data) as {
         translation?: unknown;
@@ -450,7 +459,20 @@ ${JSON.stringify(data.items)}`,
           },
         ],
       });
-      if (!grok.ok) return grok;
+      if (!grok.ok) {
+        if (grok.declined) {
+          return {
+            ok: true,
+            data: {
+              items: data.items.map((item) => ({
+                id: item.id,
+                translation: REJECTED_TRANSLATION,
+              })),
+            },
+          };
+        }
+        return grok;
+      }
       try {
         const parsed = extractJson(grok.data) as {
           items?: { id?: string; translation?: string }[];
