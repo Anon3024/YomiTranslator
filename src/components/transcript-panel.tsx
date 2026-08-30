@@ -9,6 +9,7 @@ import {
   Languages,
   Loader2,
   Plus,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -22,11 +23,14 @@ import { TranslatorToggle } from "@/components/translator-toggle";
 import type { EntryKind, LineEntry, Page, TranslatorId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+type AltResult = { alternatives: string[]; source: string };
+
 type AltState = {
   entryId: string;
   start: number;
   end: number;
   word: string;
+  source: string;
   options: string[] | null;
 };
 
@@ -51,7 +55,8 @@ type Props = {
     start: number,
     end: number,
     word: string,
-  ) => Promise<string[]>;
+    context: string,
+  ) => Promise<AltResult>;
   onExport: () => void;
   glossary: GlossaryRecord[];
   onRemember: (input: { from: string; to: string }) => void;
@@ -107,16 +112,29 @@ export function TranscriptPanel({
     start: number,
     end: number,
     word: string,
+    contextOverride?: string,
   ) => {
     const trimmed = word.trim();
     if (!trimmed) return;
-    setAlt({ entryId: id, start, end, word: trimmed, options: null });
+    const entry = page?.entries.find((e) => e.id === id);
+    const context = (
+      contextOverride !== undefined ? contextOverride : (entry?.context ?? "")
+    ).trim();
+    setAlt({
+      entryId: id,
+      start,
+      end,
+      word: trimmed,
+      source: "",
+      options: null,
+    });
     try {
-      const options = await onAlternatives(id, start, end, trimmed);
-      const remembered = customsFor(trimmed, glossary);
+      const result = await onAlternatives(id, start, end, trimmed, context);
+      const source = result.source.trim();
+      const remembered = customsFor(source || trimmed, glossary);
       const merged = [
         ...remembered.filter((c) => c.toLowerCase() !== trimmed.toLowerCase()),
-        ...options.filter(
+        ...result.alternatives.filter(
           (c) =>
             c.toLowerCase() !== trimmed.toLowerCase() &&
             !remembered.some((r) => r.toLowerCase() === c.toLowerCase()),
@@ -124,7 +142,7 @@ export function TranscriptPanel({
       ];
       setAlt((cur) =>
         cur && cur.entryId === id && cur.start === start
-          ? { ...cur, options: merged }
+          ? { ...cur, options: merged, source }
           : cur,
       );
     } catch {
@@ -140,7 +158,7 @@ export function TranscriptPanel({
       entry.english.slice(0, alt.start) + option + entry.english.slice(alt.end);
     onEntryChange(entry.id, { english: next });
     onRemember({
-      from: alt.word,
+      from: alt.source || alt.word,
       to: option,
     });
     setAlt(null);
@@ -409,6 +427,7 @@ function EntrySection({
     start: number,
     end: number,
     word: string,
+    contextOverride?: string,
   ) => void;
   onApplyAlt: (entry: LineEntry, option: string) => void;
   onClearAlt: () => void;
@@ -484,6 +503,7 @@ function EntryCard({
     start: number,
     end: number,
     word: string,
+    contextOverride?: string,
   ) => void;
   onApplyAlt: (entry: LineEntry, option: string) => void;
   onClearAlt: () => void;
@@ -507,6 +527,10 @@ function EntryCard({
     if (word && el.selectionStart !== el.selectionEnd) {
       onRequestAlts(entry.id, el.selectionStart, el.selectionEnd, word);
     }
+  };
+
+  const setContext = (value: string) => {
+    onChange(entry.id, { context: value.slice(0, 400) });
   };
 
   return (
@@ -574,6 +598,19 @@ function EntryCard({
         onMouseUp={captureJp}
       />
 
+      <label className="mt-3 mb-1 block text-xs text-muted">Context</label>
+      <Input
+        value={entry.context ?? ""}
+        maxLength={400}
+        placeholder="Optional — e.g. speaking with a mouth full"
+        className="h-9 bg-surface"
+        onChange={(e) => setContext(e.target.value)}
+      />
+      <p className="mt-1 text-xs text-subtle">
+        Used for Translate and alternatives. Situation or delivery, not a rewrite
+        of the Japanese.
+      </p>
+
       <div className="mt-3 mb-1 flex items-center justify-between gap-2">
         <label className="text-xs text-muted">Translation</label>
         <Button
@@ -591,7 +628,7 @@ function EntryCard({
         ref={enRef}
         value={entry.english}
         spellCheck
-        placeholder="English — editable. Click a word below for alternatives."
+        placeholder="English — editable. Click a word for other readings of the Japanese."
         className="min-h-16 bg-surface text-sm leading-relaxed"
         onChange={(e) => {
           onChange(entry.id, { english: e.target.value });
@@ -633,7 +670,54 @@ function EntryCard({
         <div className="mt-2 rounded-md bg-surface px-2 py-2">
           <p className="text-xs text-muted">
             Replace “{alt.word}”
+            {alt.source ? (
+              <>
+                {" "}
+                · original{" "}
+                <span lang="ja" className="text-fg">
+                  {alt.source}
+                </span>
+              </>
+            ) : null}
           </p>
+          <p className="mt-1 text-xs text-subtle">
+            Suggestions are other English readings of the Japanese, not synonyms
+            of the highlighted English.
+          </p>
+          <label className="mt-2 mb-1 block text-xs text-muted">
+            Context for this suggestion
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              value={entry.context ?? ""}
+              maxLength={400}
+              placeholder="e.g. speaking with a mouth full"
+              className="h-9 bg-bg-warm"
+              onChange={(e) => setContext(e.target.value)}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={alt.options === null}
+              onClick={() =>
+                onRequestAlts(
+                  entry.id,
+                  alt.start,
+                  alt.end,
+                  alt.word,
+                  entry.context ?? "",
+                )
+              }
+            >
+              {alt.options === null ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <RefreshCw />
+              )}
+              Suggest again
+            </Button>
+          </div>
           <form
             className="mt-2 flex gap-2"
             onSubmit={(e) => {
@@ -647,7 +731,7 @@ function EntryCard({
             <Input
               value={custom}
               onChange={(e) => setCustom(e.target.value)}
-              placeholder="Custom name, term, or phrasing"
+              placeholder="Custom English for the original Japanese"
               className="h-9 bg-bg-warm"
             />
             <Button type="submit" size="sm" disabled={!custom.trim()}>
@@ -658,8 +742,8 @@ function EntryCard({
             <p className="mt-2 text-xs text-subtle">Loading suggestions…</p>
           ) : alt.options.length === 0 ? (
             <p className="mt-2 text-xs text-subtle">
-              No suggestions. Type your own above — it is saved to the
-              dictionary.
+              No suggestions. Type your own above — it is saved to this
+              project's dictionary against the original Japanese.
             </p>
           ) : (
             <div className="mt-2 flex flex-wrap gap-1">
@@ -682,6 +766,10 @@ function EntryCard({
   );
 }
 
+function looksJapanese(value: string) {
+  return /[\u3040-\u30ff\u3400-\u9fff]/.test(value);
+}
+
 function DictionarySection({
   records,
   onRemember,
@@ -702,8 +790,9 @@ function DictionarySection({
         <Badge>{records.length}</Badge>
       </div>
       <p className="text-sm text-muted">
-        Phrase pairs stay on this device. Only the replaced term is stored, not
-        the whole line.
+        Japanese → English pairs stay with this project. Click an English word
+        to store another reading of the original Japanese, not the highlighted
+        English.
       </p>
       <form
         className="flex flex-col gap-2 sm:flex-row"
@@ -717,14 +806,15 @@ function DictionarySection({
       >
         <Input
           value={from}
+          lang={looksJapanese(from) ? "ja" : undefined}
           onChange={(e) => setFrom(e.target.value)}
-          placeholder="Phrase or name"
+          placeholder="Japanese"
           className="h-9"
         />
         <Input
           value={to}
           onChange={(e) => setTo(e.target.value)}
-          placeholder="Use instead"
+          placeholder="English"
           className="h-9"
         />
         <Button type="submit" size="sm" disabled={!from.trim() || !to.trim()}>
@@ -733,7 +823,7 @@ function DictionarySection({
       </form>
       {records.length === 0 ? (
         <p className="text-sm text-subtle">
-          Empty. Click a word and type a custom replacement to fill it.
+          Empty. Click an English word, or add a Japanese → English pair.
         </p>
       ) : (
         <ul className="space-y-2">
@@ -743,7 +833,12 @@ function DictionarySection({
               className="flex items-start gap-2 rounded-lg bg-bg-warm px-3 py-2"
             >
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-fg">{row.from}</p>
+                <p
+                  className="text-sm text-fg"
+                  lang={looksJapanese(row.from) ? "ja" : undefined}
+                >
+                  {row.from}
+                </p>
                 <p className="text-sm text-muted">{row.to}</p>
               </div>
               <Button
@@ -762,4 +857,3 @@ function DictionarySection({
     </div>
   );
 }
-
