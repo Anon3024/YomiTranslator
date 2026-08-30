@@ -602,7 +602,7 @@ function EntryCard({
       <Input
         value={entry.context ?? ""}
         maxLength={400}
-        placeholder="Optional — e.g. speaking with a mouth full"
+        placeholder="Optional — e.g. speaking with a mouth full, onomatopoeia, etc. "
         className="h-9 bg-surface"
         onChange={(e) => setContext(e.target.value)}
       />
@@ -691,7 +691,7 @@ function EntryCard({
             <Input
               value={entry.context ?? ""}
               maxLength={400}
-              placeholder="e.g. speaking with a mouth full"
+              placeholder="e.g. speaking with a mouth full, onomatopoeia, etc."
               className="h-9 bg-bg-warm"
               onChange={(e) => setContext(e.target.value)}
             />
