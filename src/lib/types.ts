@@ -36,6 +36,8 @@ export type LineEntry = {
   japanese: string;
   english: string;
   notes?: string;
+  /** Extra situation for Translate / alternatives, e.g. "speaking with a mouth full". */
+  context?: string;
 };
 
 export type Page = {

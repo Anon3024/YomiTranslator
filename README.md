@@ -17,8 +17,9 @@ It does **not** ship an API key. You paste your own [xAI](https://docs.x.ai) key
 - Lines vs SFX/detail: dialogue stays a Line; signs, tattoos, and sound effects can be marked SFX
 - Translate one line or queue a whole page. Calls run one after another
 - Optional DeepL key: switch Translate between Grok and DeepL
-- Click a word in the English for alternatives, or type a custom phrasing
-- Phrase dictionary stored with the current project (term → replacement, not the whole line)
+- Click a word in the English for other readings of the original Japanese, or type a custom phrasing
+- Optional per-line context (situation or delivery, e.g. speaking with a mouth full) for Translate and alternatives
+- Japanese → English dictionary stored with the current project (term → replacement, not the whole line)
 - Name, save, and load projects as a zip folder (images, translations, dictionary)
 - Export a Markdown file of every page (original + translation, lines and SFX)
 - Download the images as `yomi-pages.zip` (`1.png`, `2.png`, … in current order)
@@ -42,7 +43,7 @@ Transcription will not run without an xAI key.
 2. Open the key icon, paste it under **DeepL**, and save.
 3. A **Translate with** control appears (Grok or DeepL). The same switch is on the transcript panel.
 
-DeepL is used only for Translate / Translate page. Word alternatives still use Grok. Removing the DeepL key switches translation back to Grok.
+DeepL is used only for Translate / Translate page. Word alternatives still use Grok. A line with Context set is also sent to Grok, because DeepL cannot take freeform situation notes. Removing the DeepL key switches translation back to Grok.
 
 ## Projects
 
@@ -53,7 +54,7 @@ A project is one Yomi session: the page images, in-progress translations, and th
 3. **Load** opens a previously saved zip (you can also drop the zip on the page).
 4. **New** clears pages and the dictionary and starts an Untitled project.
 
-The dictionary is not shared between projects.
+The dictionary is not shared between projects. Saved zips keep that project’s pairs (and any per-line context).
 
 ## How to use
 
@@ -61,9 +62,10 @@ The dictionary is not shared between projects.
 2. **Region** is the default tool. Drag a box over one balloon or line, then **Transcribe**. Repeat for the next region.
 3. Edit the Japanese if the reading is off.
 4. **Translate** one line, or **Translate page** for every empty line. Further clicks while one is running add them to the queue.
-5. Click an English word for alternatives, or type your own name/term. Only that phrase is saved to the dictionary.
-6. Mark background text and sound effects as **SFX** so they export in a separate section.
-7. **Export** writes `yomi.md`. **Download images** writes a zip of the pages as PNG.
+5. Click an English word for other readings of the original Japanese (shown next to the options), or type your own English. That Japanese → English pair is saved to this project’s dictionary.
+6. Use **Context** on a line when the situation matters (mouth full, whisper, drunk). Translate and alternatives follow it. **Suggest again** after you change it.
+7. Mark background text and sound effects as **SFX** so they export in a separate section.
+8. **Export** writes `yomi.md`. **Download images** writes a zip of the pages as PNG.
 
 ### Shortcuts and tools
 

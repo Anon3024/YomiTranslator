@@ -1,5 +1,8 @@
 import type { EntryKind, LineEntry, Page } from "./types";
-import type { GlossaryRecord } from "./glossary";
+import {
+  parseGlossaryRecords,
+  type GlossaryRecord,
+} from "./glossary";
 import { srcToPngBytes } from "./download-images";
 import { buildZip, downloadBlob, readZip } from "./zip";
 
@@ -8,12 +11,16 @@ export const PROJECT_VERSION = 1;
 export const DEFAULT_PROJECT_NAME = "Untitled";
 
 const NAME_KEY = "yomi.project-name";
+const SESSION_KEY = "yomi.session.v1";
+const GLOSSARY_V2 = "yomi.glossary.v2";
+const GLOSSARY_V1 = "yomi.glossary.v1";
 const MAX_PAGES = 80;
 const MAX_IMAGE = 8_000_000;
 
 export type ProjectFile = {
   kind: typeof PROJECT_KIND;
   version: number;
+  id?: string;
   name: string;
   savedAt: string;
   pageIndex: number;
@@ -26,20 +33,95 @@ export type ProjectFile = {
 };
 
 export type LoadedProject = {
+  id: string;
   name: string;
   pageIndex: number;
   glossary: GlossaryRecord[];
   pages: Page[];
 };
 
-export function loadProjectName(): string {
-  if (typeof localStorage === "undefined") return DEFAULT_PROJECT_NAME;
+export type ProjectSession = {
+  id: string;
+  name: string;
+  glossary: GlossaryRecord[];
+};
+
+export function newProjectId(): string {
+  return crypto.randomUUID();
+}
+
+function readStorage(name: string): string {
+  if (typeof localStorage === "undefined") return "";
   try {
-    const name = String(localStorage.getItem(NAME_KEY) ?? "").trim();
-    return name.slice(0, 80) || DEFAULT_PROJECT_NAME;
+    return String(localStorage.getItem(name) ?? "");
   } catch {
-    return DEFAULT_PROJECT_NAME;
+    return "";
   }
+}
+
+function writeStorage(name: string, value: string) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    if (value) localStorage.setItem(name, value);
+    else localStorage.removeItem(name);
+  } catch {
+    // private mode
+  }
+}
+
+function migrateOldGlossary(): GlossaryRecord[] {
+  const v2 = readStorage(GLOSSARY_V2);
+  if (v2) {
+    try {
+      return parseGlossaryRecords(JSON.parse(v2));
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+export function loadSession(): ProjectSession {
+  const raw = readStorage(SESSION_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as Partial<ProjectSession>;
+      const id = String(parsed.id || "").trim() || newProjectId();
+      const name = sanitizeProjectName(String(parsed.name || ""));
+      const glossary = parseGlossaryRecords(parsed.glossary);
+      return { id, name, glossary };
+    } catch {
+      // fall through
+    }
+  }
+  const name = sanitizeProjectName(readStorage(NAME_KEY));
+  const glossary = migrateOldGlossary();
+  const session = { id: newProjectId(), name, glossary };
+  saveSession(session);
+  try {
+    localStorage.removeItem(GLOSSARY_V2);
+    localStorage.removeItem(GLOSSARY_V1);
+  } catch {
+    // ignore
+  }
+  return session;
+}
+
+export function saveSession(session: ProjectSession) {
+  const name = sanitizeProjectName(session.name);
+  writeStorage(NAME_KEY, name);
+  writeStorage(
+    SESSION_KEY,
+    JSON.stringify({
+      id: session.id || newProjectId(),
+      name,
+      glossary: session.glossary,
+    }),
+  );
+}
+
+export function loadProjectName(): string {
+  return loadSession().name;
 }
 
 export function saveProjectName(value: string) {
@@ -85,6 +167,7 @@ function padPage(i: number) {
 }
 
 export async function saveProjectZip(args: {
+  id: string;
   name: string;
   pages: Page[];
   glossary: GlossaryRecord[];
@@ -115,6 +198,7 @@ export async function saveProjectZip(args: {
         japanese: e.japanese,
         english: e.english,
         notes: e.notes,
+        context: e.context,
       })),
     });
   }
@@ -122,6 +206,7 @@ export async function saveProjectZip(args: {
   const doc: ProjectFile = {
     kind: PROJECT_KIND,
     version: PROJECT_VERSION,
+    id: args.id || newProjectId(),
     name,
     savedAt: new Date().toISOString(),
     pageIndex: Math.max(
@@ -169,38 +254,20 @@ function findProjectJson(files: { name: string; data: Uint8Array }[]) {
   return matches[0];
 }
 
-function parseGlossary(raw: unknown): GlossaryRecord[] {
-  if (!Array.isArray(raw)) return [];
-  const out: GlossaryRecord[] = [];
-  const seen = new Set<string>();
-  for (const row of raw as Partial<GlossaryRecord>[]) {
-    const from = String(row?.from ?? "").trim().slice(0, 80);
-    const to = String(row?.to ?? "").trim().slice(0, 80);
-    const key = from.toLowerCase();
-    if (!from || !to || seen.has(key)) continue;
-    seen.add(key);
-    out.push({
-      id: String(row?.id || crypto.randomUUID()),
-      from,
-      to,
-      updatedAt: Number(row?.updatedAt) || Date.now(),
-    });
-  }
-  return out;
-}
-
 function parseEntries(raw: unknown): LineEntry[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((item) => {
       const row = item as Partial<LineEntry>;
       const kind: EntryKind = row?.kind === "detail" ? "detail" : "line";
+      const context = String(row?.context ?? "").trim().slice(0, 400);
       return {
         id: String(row?.id || crypto.randomUUID()),
         kind,
         japanese: String(row?.japanese ?? ""),
         english: String(row?.english ?? ""),
         notes: row?.notes ? String(row.notes) : undefined,
+        context: context || undefined,
       };
     })
     .filter((e) => e.id);
@@ -262,9 +329,10 @@ export async function loadProjectZip(
     Math.min(Number(parsed.pageIndex) || 0, Math.max(pages.length - 1, 0)),
   );
   return {
+    id: String(parsed.id || "").trim() || newProjectId(),
     name: sanitizeProjectName(String(parsed.name || DEFAULT_PROJECT_NAME)),
     pageIndex,
-    glossary: parseGlossary(parsed.glossary),
+    glossary: parseGlossaryRecords(parsed.glossary),
     pages,
   };
 }

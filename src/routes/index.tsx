@@ -40,19 +40,18 @@ import {
 import {
   applyGlossary,
   glossaryPayload,
-  loadGlossary,
-  saveGlossary,
   upsertRecord,
   type GlossaryRecord,
 } from "@/lib/glossary";
 import {
   DEFAULT_PROJECT_NAME,
   downloadNameFor,
-  loadProjectName,
   loadProjectZip,
+  loadSession,
   looksLikeProjectFile,
-  saveProjectName,
+  newProjectId,
   saveProjectZip,
+  saveSession,
   sanitizeProjectName,
 } from "@/lib/project";
 import { applyTheme, readTheme, type Theme } from "@/lib/theme";
@@ -78,13 +77,15 @@ function Home() {
   const [translatingId, setTranslatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [glossary, setGlossary] = useState<GlossaryRecord[]>(loadGlossary);
+  const [boot] = useState(loadSession);
+  const [glossary, setGlossary] = useState<GlossaryRecord[]>(boot.glossary);
   const [theme, setThemeState] = useState<Theme>("light");
   const [queueIds, setQueueIds] = useState<string[]>([]);
   const [apiKey, setApiKeyState] = useState(loadApiKey);
   const [deeplKey, setDeeplKeyState] = useState(loadDeeplKey);
   const [translator, setTranslatorState] = useState<TranslatorId>(loadTranslator);
-  const [projectName, setProjectNameState] = useState(loadProjectName);
+  const [projectId, setProjectId] = useState(boot.id);
+  const [projectName, setProjectNameState] = useState(boot.name);
   const [savingProject, setSavingProject] = useState(false);
   const [view, setView] = useState<"page" | "reorder">("page");
   const [downloading, setDownloading] = useState(false);
@@ -103,7 +104,6 @@ function Home() {
   const setProjectName = useCallback((value: string) => {
     const name = value.replace(/\s+/g, " ").slice(0, 80);
     setProjectNameState(name);
-    saveProjectName(sanitizeProjectName(name));
   }, []);
 
   const setApiKey = useCallback((value: string) => {
@@ -135,8 +135,12 @@ function Home() {
   }, []);
 
   useEffect(() => {
-    saveGlossary(glossary);
-  }, [glossary]);
+    saveSession({
+      id: projectId,
+      name: projectName,
+      glossary,
+    });
+  }, [glossary, projectId, projectName]);
 
   pagesRef.current = pages;
   const page = pages[pageIndex] ?? null;
@@ -164,25 +168,28 @@ function Home() {
   }, []);
 
   const replaceSession = useCallback(
-    (nextPages: Page[], nextGlossary: GlossaryRecord[], name: string) => {
+    (
+      nextPages: Page[],
+      nextGlossary: GlossaryRecord[],
+      name: string,
+      id = newProjectId(),
+    ) => {
       stopWork();
       for (const item of pagesRef.current) {
         URL.revokeObjectURL(item.src);
       }
       pagesRef.current = nextPages;
       setPages(nextPages);
-      setPageIndex(
-        Math.max(0, Math.min(nextPages.length - 1, 0)),
-      );
+      setPageIndex(Math.max(0, Math.min(nextPages.length - 1, 0)));
       setGlossary(nextGlossary);
-      saveGlossary(nextGlossary);
+      setProjectId(id);
       setProjectName(name);
     },
     [setProjectName, stopWork],
   );
 
   const newProject = useCallback(() => {
-    replaceSession([], [], DEFAULT_PROJECT_NAME);
+    replaceSession([], [], DEFAULT_PROJECT_NAME, newProjectId());
     toast("New project");
   }, [replaceSession]);
 
@@ -190,6 +197,7 @@ function Home() {
     setSavingProject(true);
     try {
       await saveProjectZip({
+        id: projectId,
         name: projectName,
         pages: pagesRef.current,
         glossary: glossaryRef.current,
@@ -201,14 +209,19 @@ function Home() {
     } finally {
       setSavingProject(false);
     }
-  }, [pageIndex, projectName]);
+  }, [pageIndex, projectId, projectName]);
 
   const loadProjectFile = useCallback(
     async (file: File) => {
       const toastId = toast.loading("Loading project…");
       try {
         const loaded = await loadProjectZip(file);
-        replaceSession(loaded.pages, loaded.glossary, loaded.name);
+        replaceSession(
+          loaded.pages,
+          loaded.glossary,
+          loaded.name,
+          loaded.id,
+        );
         setPageIndex(loaded.pageIndex);
         toast.success(`Loaded ${loaded.name}`, { id: toastId });
       } catch (err) {
@@ -543,6 +556,7 @@ function Home() {
               apiKey: apiKeyRef.current,
               deeplKey: deeplKeyRef.current,
               provider: translatorRef.current,
+              context: entry.context ?? "",
             },
           });
           if (sessionRef.current !== epoch) return;
@@ -582,21 +596,28 @@ function Home() {
   }, []);
 
   const runAlternatives = useCallback(
-    async (id: string, _start: number, _end: number, word: string) => {
+    async (
+      id: string,
+      _start: number,
+      _end: number,
+      word: string,
+      context: string,
+    ) => {
       const entry = pagesRef.current[pageIndex]?.entries.find((e) => e.id === id);
       const res = await suggestAlternatives({
         data: {
           japanese: entry?.japanese ?? "",
           english: entry?.english ?? "",
           selected: word,
+          context: context || entry?.context || "",
           apiKey: apiKeyRef.current,
         },
       });
       if (!res.ok) {
         toast.error(res.error);
-        return [];
+        return { alternatives: [], source: "" };
       }
-      return res.data.alternatives;
+      return res.data;
     },
     [pageIndex],
   );
@@ -824,7 +845,7 @@ function Home() {
           </h1>
           <p className="mt-3 max-w-md text-sm leading-relaxed text-muted">
             Region by region, page by page. Edit the English, click a word for
-            alternatives, export when you are done.
+            other readings of the Japanese, export when you are done.
           </p>
         </div>
         <div className="flex items-center gap-2 self-start">

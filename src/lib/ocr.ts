@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
+  REJECTED_TRANSLATION,
   type OcrResult,
   type TranslateResult,
   type TranslatorId,
@@ -324,8 +325,17 @@ function glossaryPrompt(terms: { from: string; to: string }[]) {
   if (terms.length === 0) return "";
   return `
 
-Preferred term replacements — use these for the matching word or name, not the whole sentence:
+Preferred translations of Japanese (or already-English) terms — use the given English for that term, not the whole sentence:
 ${terms.map((t) => `- "${t.from}" → "${t.to}"`).join("\n")}`;
+}
+
+function contextPrompt(context: string) {
+  const text = context.trim();
+  if (!text) return "";
+  return `
+
+Situation / delivery — honor this in the English even when that means slurred, muffled, whispered, or otherwise non-literal speech instead of a tidy rendering:
+${text}`;
 }
 
 export const fetchRemoteImage = createServerFn({ method: "POST" })
@@ -464,6 +474,7 @@ export const translateText = createServerFn({ method: "POST" })
       apiKey?: string;
       deeplKey?: string;
       provider?: string;
+      context?: string;
     };
     if (!data?.text || typeof data.text !== "string") {
       throw new Error("Missing text");
@@ -471,8 +482,9 @@ export const translateText = createServerFn({ method: "POST" })
     const text = data.text.trim();
     if (!text) throw new Error("Nothing to translate.");
     if (text.length > 8000) throw new Error("Text is too long to translate.");
-    const provider: TranslatorId =
-      data.provider === "deepl" ? "deepl" : "grok";
+    const context = String(data.context ?? "").trim().slice(0, 400);
+    const wantsDeepl = data.provider === "deepl" && !context;
+    const provider: TranslatorId = wantsDeepl ? "deepl" : "grok";
     if (provider === "deepl") {
       return {
         text,
@@ -480,7 +492,13 @@ export const translateText = createServerFn({ method: "POST" })
         provider,
         apiKey: "",
         deeplKey: readDeeplKey(data.deeplKey),
+        context: "",
       };
+    }
+    if (data.provider === "deepl" && context && !String(data.apiKey ?? "").trim()) {
+      throw new Error(
+        "Context needs an xAI key. DeepL cannot use situation notes.",
+      );
     }
     return {
       text,
@@ -488,6 +506,7 @@ export const translateText = createServerFn({ method: "POST" })
       provider,
       apiKey: readUserApiKey(data.apiKey),
       deeplKey: "",
+      context,
     };
   })
   .handler(async ({ data }): Promise<FnResult<TranslateResult>> => {
@@ -502,7 +521,7 @@ export const translateText = createServerFn({ method: "POST" })
       messages: [
         {
           role: "user",
-          content: `Translate the following Japanese into natural English. Keep names, onomatopoeia, and register. If a line is ambiguous, give the most likely reading and a brief note. Do not add content that is not in the source.${glossaryPrompt(data.glossary)}
+          content: `Translate the following Japanese into natural English. Keep names, onomatopoeia, and register. If a line is ambiguous, give the most likely reading and a brief note. Do not add content that is not in the source.${glossaryPrompt(data.glossary)}${contextPrompt(data.context)}
 
 Return JSON: { "translation": string, "notes": string }
 
@@ -511,7 +530,12 @@ ${data.text}`,
         },
       ],
     });
-    if (!grok.ok) return grok;
+    if (!grok.ok) {
+      if (grok.declined) {
+        return { ok: true, data: { translation: REJECTED_TRANSLATION } };
+      }
+      return grok;
+    }
     try {
       const parsed = extractJson(grok.data) as {
         translation?: unknown;
@@ -603,7 +627,20 @@ ${JSON.stringify(data.items)}`,
           },
         ],
       });
-      if (!grok.ok) return grok;
+      if (!grok.ok) {
+        if (grok.declined) {
+          return {
+            ok: true,
+            data: {
+              items: data.items.map((item) => ({
+                id: item.id,
+                translation: REJECTED_TRANSLATION,
+              })),
+            },
+          };
+        }
+        return grok;
+      }
       try {
         const parsed = extractJson(grok.data) as {
           items?: { id?: string; translation?: string }[];
@@ -629,29 +666,35 @@ export const suggestAlternatives = createServerFn({ method: "POST" })
       japanese?: string;
       english?: string;
       selected?: string;
+      context?: string;
       apiKey?: string;
     };
     const japanese = String(data?.japanese ?? "").trim();
     const english = String(data?.english ?? "").trim();
     const selected = String(data?.selected ?? "").trim();
+    const context = String(data?.context ?? "").trim().slice(0, 400);
     if (!selected) throw new Error("Select a word first.");
     if (selected.length > 80) throw new Error("Selection is too long.");
     return {
       japanese,
       english,
       selected,
+      context,
       apiKey: readUserApiKey(data.apiKey),
     };
   })
-  .handler(async ({ data }): Promise<FnResult<{ alternatives: string[] }>> => {
-    const grok = await grokChat({
-      apiKey: data.apiKey,
-      temperature: 0.4,
-      max_tokens: 400,
-      messages: [
-        {
-          role: "user",
-          content: `You are helping edit an English translation of Japanese. Suggest alternative wordings for ONLY the selected English span. Each alternative must drop into the sentence in place of that span (same role, similar length). Do not repeat the current span. Do not rewrite the whole sentence.
+  .handler(
+    async ({
+      data,
+    }): Promise<FnResult<{ alternatives: string[]; source: string }>> => {
+      const grok = await grokChat({
+        apiKey: data.apiKey,
+        temperature: 0.4,
+        max_tokens: 500,
+        messages: [
+          {
+            role: "user",
+            content: `You are helping edit an English translation of Japanese. The user selected an English span. Identify the Japanese in the source that this span translates (the original wording, e.g. a kanji or phrase). Then suggest other natural English translations of THAT Japanese — not English synonyms of the selected span. Each alternative must drop into the sentence in place of the selected span. Do not repeat the current span. Do not rewrite the whole sentence.${contextPrompt(data.context)}
 
 Japanese source:
 ${data.japanese || "(none)"}
@@ -659,30 +702,36 @@ ${data.japanese || "(none)"}
 Full English translation:
 ${data.english}
 
-Selected span:
+Selected English span:
 ${data.selected}
 
-Return JSON: { "alternatives": string[] } with 5 to 8 distinct options.`,
-        },
-      ],
-    });
-    if (!grok.ok) return grok;
-    try {
-      const parsed = extractJson(grok.data) as { alternatives?: unknown };
-      const alternatives = Array.isArray(parsed.alternatives)
-        ? parsed.alternatives
-            .map((item) => String(item).trim())
-            .filter(
-              (item, i, arr) =>
-                item.length > 0 &&
-                item.toLowerCase() !== data.selected.toLowerCase() &&
-                arr.findIndex((x) => x.toLowerCase() === item.toLowerCase()) ===
-                  i,
-            )
-            .slice(0, 8)
-        : [];
-      return { ok: true, data: { alternatives } };
-    } catch {
-      return { ok: false, error: "Could not load alternatives." };
-    }
-  });
+Return JSON: { "source": string, "alternatives": string[] }
+"source" is the Japanese that the span translates. "alternatives" has 5 to 8 distinct English options for that Japanese.`,
+          },
+        ],
+      });
+      if (!grok.ok) return grok;
+      try {
+        const parsed = extractJson(grok.data) as {
+          alternatives?: unknown;
+          source?: unknown;
+        };
+        const source = String(parsed.source ?? "").trim().slice(0, 80);
+        const alternatives = Array.isArray(parsed.alternatives)
+          ? parsed.alternatives
+              .map((item) => String(item).trim())
+              .filter(
+                (item, i, arr) =>
+                  item.length > 0 &&
+                  item.toLowerCase() !== data.selected.toLowerCase() &&
+                  arr.findIndex((x) => x.toLowerCase() === item.toLowerCase()) ===
+                    i,
+              )
+              .slice(0, 8)
+          : [];
+        return { ok: true, data: { alternatives, source } };
+      } catch {
+        return { ok: false, error: "Could not load alternatives." };
+      }
+    },
+  );

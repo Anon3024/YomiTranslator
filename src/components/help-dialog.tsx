@@ -79,23 +79,38 @@ export function HelpDialog() {
               Clicking Translate on more lines while one is running adds them
               to a queue — they run one after another. If a DeepL key is
               saved, choose Grok or DeepL with the Translate with control.
-              The English box is always editable.
+              The English box is always editable. A line with Context set is
+              sent to Grok so the English can follow that situation.
+            </p>
+          </section>
+          <section className="space-y-1">
+            <h3 className="font-medium">Context</h3>
+            <p className="text-muted">
+              Each line has an optional Context field for situation or
+              delivery — for example "speaking with a mouth full". Translate
+              and word alternatives honor it, so the English can sound
+              muffled, whispered, or otherwise non-literal instead of a tidy
+              rendering of the Japanese. DeepL cannot use freeform context;
+              those lines use Grok.
             </p>
           </section>
           <section className="space-y-1">
             <h3 className="font-medium">Custom wording</h3>
             <p className="text-muted">
-              Click a word in the English line for alternatives, or type your
-              own name, term, or phrasing. Only that phrase is saved to the
-              dictionary, not the whole line. Later translations reuse it.
+              Click a word in the English line for other readings of the
+              original Japanese (not English synonyms). The original kanji or
+              phrase is shown with the options. Type your own English if
+              needed. That Japanese → English pair is saved to this project’s
+              dictionary, not the whole line. Suggest again after changing
+              Context.
             </p>
           </section>
           <section className="space-y-1">
             <h3 className="font-medium">Dictionary</h3>
             <p className="text-muted">
-              Phrase → replacement pairs belong to the current project. Add
-              Japanese names or English terms by hand. Export writes every page
-              as Markdown.
+              Japanese → English pairs belong to the current project. New
+              project starts empty; Load restores that zip’s dictionary. Add
+              names or terms by hand. Export writes every page as Markdown.
             </p>
           </section>
           <section className="space-y-1">
