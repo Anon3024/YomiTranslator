@@ -338,6 +338,34 @@ Situation / delivery — honor this in the English even when that means slurred,
 ${text}`;
 }
 
+type NearbyLine = { japanese: string; english: string };
+
+function sanitizeNearby(raw: unknown): NearbyLine[] {
+  if (!Array.isArray(raw)) return [];
+  const out: NearbyLine[] = [];
+  for (const row of raw as Partial<NearbyLine>[]) {
+    const japanese = String(row?.japanese ?? "").trim().slice(0, 200);
+    const english = String(row?.english ?? "").trim().slice(0, 200);
+    if (!japanese && !english) continue;
+    out.push({ japanese, english });
+    if (out.length >= 16) break;
+  }
+  return out;
+}
+
+function nearbyPrompt(lines: NearbyLine[]) {
+  if (lines.length === 0) return "";
+  return `
+
+Nearby lines already on this page (and the pages next to it), each as original Japanese plus English. Use BOTH languages to resolve who is referred to, who is addressed, and what a vague person-word means. This may be a sign, form, caption, menu, or dialogue — do not assume a story or named characters:
+${lines
+  .map(
+    (l, i) =>
+      `${i + 1}. JP: ${l.japanese || "(none)"} / EN: ${l.english || "(none)"}`,
+  )
+  .join("\n")}`;
+}
+
 export const fetchRemoteImage = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const data = input as { url?: string };
@@ -475,6 +503,7 @@ export const translateText = createServerFn({ method: "POST" })
       deeplKey?: string;
       provider?: string;
       context?: string;
+      nearby?: unknown;
     };
     if (!data?.text || typeof data.text !== "string") {
       throw new Error("Missing text");
@@ -483,6 +512,7 @@ export const translateText = createServerFn({ method: "POST" })
     if (!text) throw new Error("Nothing to translate.");
     if (text.length > 8000) throw new Error("Text is too long to translate.");
     const context = String(data.context ?? "").trim().slice(0, 400);
+    const nearby = sanitizeNearby(data.nearby);
     const wantsDeepl = data.provider === "deepl" && !context;
     const provider: TranslatorId = wantsDeepl ? "deepl" : "grok";
     if (provider === "deepl") {
@@ -493,6 +523,7 @@ export const translateText = createServerFn({ method: "POST" })
         apiKey: "",
         deeplKey: readDeeplKey(data.deeplKey),
         context: "",
+        nearby: [] as NearbyLine[],
       };
     }
     if (data.provider === "deepl" && context && !String(data.apiKey ?? "").trim()) {
@@ -507,6 +538,7 @@ export const translateText = createServerFn({ method: "POST" })
       apiKey: readUserApiKey(data.apiKey),
       deeplKey: "",
       context,
+      nearby,
     };
   })
   .handler(async ({ data }): Promise<FnResult<TranslateResult>> => {
@@ -521,7 +553,7 @@ export const translateText = createServerFn({ method: "POST" })
       messages: [
         {
           role: "user",
-          content: `Translate the following Japanese into natural English. Keep names, onomatopoeia, and register. If a line is ambiguous, give the most likely reading and a brief note. Do not add content that is not in the source.${glossaryPrompt(data.glossary)}${contextPrompt(data.context)}
+          content: `Translate the following Japanese into natural English. Keep names, onomatopoeia, and register. Japanese often omits I/you/he/she/they; infer the person from this line plus the nearby Japanese and English. If a line is still ambiguous, give the most likely reading and a brief note. Do not add content that is not in the source.${glossaryPrompt(data.glossary)}${contextPrompt(data.context)}${nearbyPrompt(data.nearby)}
 
 Return JSON: { "translation": string, "notes": string }
 
@@ -667,12 +699,14 @@ export const suggestAlternatives = createServerFn({ method: "POST" })
       english?: string;
       selected?: string;
       context?: string;
+      nearby?: unknown;
       apiKey?: string;
     };
     const japanese = String(data?.japanese ?? "").trim();
     const english = String(data?.english ?? "").trim();
     const selected = String(data?.selected ?? "").trim();
     const context = String(data?.context ?? "").trim().slice(0, 400);
+    const nearby = sanitizeNearby(data?.nearby);
     if (!selected) throw new Error("Select a word first.");
     if (selected.length > 80) throw new Error("Selection is too long.");
     return {
@@ -680,6 +714,7 @@ export const suggestAlternatives = createServerFn({ method: "POST" })
       english,
       selected,
       context,
+      nearby,
       apiKey: readUserApiKey(data.apiKey),
     };
   })
@@ -694,19 +729,28 @@ export const suggestAlternatives = createServerFn({ method: "POST" })
         messages: [
           {
             role: "user",
-            content: `You are helping edit an English translation of Japanese. The user selected an English span. Identify the Japanese in the source that this span translates (the original wording, e.g. a kanji or phrase). Then suggest other natural English translations of THAT Japanese — not English synonyms of the selected span. Each alternative must drop into the sentence in place of the selected span. Do not repeat the current span. Do not rewrite the whole sentence.${contextPrompt(data.context)}
+            content: `You are helping edit an English translation of Japanese. The user selected an English span.
 
-Japanese source:
+Use ALL of this as context, in both languages: this line's Japanese, this line's English, nearby lines on the page (Japanese and English), and any situation notes. Do not assume a story, manga, or named characters — it may be a sign, form, caption, menu, or dialogue.
+
+Japanese often omits the person (I/you/he/she/they) or uses a vague word (奴, お前, あの人). If the selected span is a person reference — a pronoun, a name, or a stand-in — suggest other person references that still fit this bilingual context, even when the Japanese has no explicit pronoun. Always include other pronouns in the same slot (I/you/he/she/they/we, or me/him/her, etc.) plus any natural lexical options (that guy, you there).
+
+If the span is not a person reference, identify the Japanese that it translates and suggest other English readings of THAT Japanese — not English synonyms of the selected span.
+
+Each alternative must drop into the sentence in place of the selected span. Do not repeat the current span. Do not rewrite the whole sentence.${contextPrompt(data.context)}${nearbyPrompt(data.nearby)}
+
+This line, Japanese:
 ${data.japanese || "(none)"}
 
-Full English translation:
+This line, English:
 ${data.english}
 
 Selected English span:
 ${data.selected}
 
 Return JSON: { "source": string, "alternatives": string[] }
-"source" is the Japanese that the span translates. "alternatives" has 5 to 8 distinct English options for that Japanese.`,
+"source" is the Japanese that the span translates, or "" if the person was omitted from the Japanese.
+"alternatives" has 5 to 8 distinct English options.`,
           },
         ],
       });

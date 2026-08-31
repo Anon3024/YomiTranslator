@@ -25,6 +25,31 @@ export function entriesOf(page: Page, kind: EntryKind) {
   return page.entries.filter((e) => e.kind === kind);
 }
 
+/** Other lines on this page, then the previous and next page, as JP+EN pairs. */
+export function surroundingLines(
+  pages: Page[],
+  entryId: string,
+  cap = 16,
+): { japanese: string; english: string }[] {
+  const pi = pages.findIndex((p) => p.entries.some((e) => e.id === entryId));
+  if (pi < 0) return [];
+  const order = [pi];
+  if (pi > 0) order.push(pi - 1);
+  if (pi < pages.length - 1) order.push(pi + 1);
+  const out: { japanese: string; english: string }[] = [];
+  for (const i of order) {
+    for (const e of pages[i].entries) {
+      if (e.id === entryId) continue;
+      const japanese = e.japanese.trim();
+      const english = e.english.trim();
+      if (!japanese && !english) continue;
+      out.push({ japanese, english });
+      if (out.length >= cap) return out;
+    }
+  }
+  return out;
+}
+
 export function toMarkdown(pages: Page[]): string {
   return pages
     .map((page, i) => {
