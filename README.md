@@ -12,6 +12,7 @@ It does **not** ship an API key. You paste your own [xAI](https://docs.x.ai) key
 
 - Add pages by drop, paste, file picker, or image URL
 - Crop a region so OCR sees only the balloon, sign, or line you selected
+- A crop of that region sits next to the Japanese line for proofreading; click to enlarge
 - Multi-page session with left/right navigation
 - Re-order pages in a grid (drag or arrows). Regions are off in that view
 - Lines vs SFX/detail: dialogue stays a Line; signs, tattoos, and sound effects can be marked SFX
@@ -54,13 +55,13 @@ A project is one Yomi session: the page images, in-progress translations, and th
 3. **Load** opens a previously saved zip (you can also drop the zip on the page).
 4. **New** clears pages and the dictionary and starts an Untitled project.
 
-The dictionary is not shared between projects. Saved zips keep that project’s pairs (and any per-line context).
+The dictionary is not shared between projects. Saved zips keep that project’s pairs, per-line context, and region crops.
 
 ## How to use
 
 1. Drop, paste, or choose a photo. Add more pages if you have a sequence.
-2. **Region** is the default tool. Drag a box over one balloon or line, then **Transcribe**. Repeat for the next region.
-3. Edit the Japanese if the reading is off.
+2. **Region** is the default tool. Drag a box over one balloon or line, then **Transcribe**. Repeat for the next region. A crop of the box appears next to the Japanese line — click it to enlarge.
+3. Edit the Japanese if the reading is off, using the crop as a reference.
 4. **Translate** one line, or **Translate page** for every empty line. Further clicks while one is running add them to the queue.
 5. Click an English word for other readings of the original Japanese (shown next to the options), or type your own English. Person words also offer I / you / he / she / they, using this line and nearby lines in both languages. A Japanese term is saved to this project’s dictionary; a pronoun-only swap is not.
 6. Use **Context** on a line when the situation matters (mouth full, whisper, drunk). Translate and alternatives follow it. **Suggest again** after you change it.

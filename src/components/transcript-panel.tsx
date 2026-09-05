@@ -17,6 +17,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { entriesOf, tokenizeEnglish } from "@/lib/pages";
 import { customsFor, type GlossaryRecord } from "@/lib/glossary";
 import {
@@ -189,7 +195,8 @@ export function TranscriptPanel({
             {page ? `Page ${pageNumber}` : "Transcript"}
           </h2>
           <p className="mt-1 text-sm text-muted">
-            Draw a region and transcribe to add a line. Mark SFX separately.
+            Draw a region and transcribe to add a line. The crop sits next to
+            the Japanese so you can correct it without scrolling.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -486,6 +493,45 @@ function EntrySection({
   );
 }
 
+function RegionThumb({ src, label }: { src: string; label: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        className="relative h-20 w-16 shrink-0 overflow-hidden rounded-md bg-surface shadow-[var(--shadow-border)] transition-[box-shadow] duration-150 ease-out hover:bg-bg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-warm"
+        onClick={() => setOpen(true)}
+        aria-label={`Enlarge region for ${label}`}
+      >
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          decoding="async"
+          className="size-full object-contain outline outline-1 -outline-offset-1 outline-fg/10"
+        />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="w-[min(100%-1.5rem,42rem)]">
+          <DialogTitle>Region for {label}</DialogTitle>
+          <DialogDescription>
+            Crop used when this line was transcribed. Compare it while you
+            correct the Japanese.
+          </DialogDescription>
+          <div className="mt-4 overflow-auto rounded-lg bg-bg-warm p-2">
+            <img
+              src={src}
+              alt=""
+              decoding="async"
+              className="mx-auto max-h-96 w-auto max-w-full object-contain outline outline-1 -outline-offset-1 outline-fg/10"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function EntryCard({
   n,
   kind,
@@ -602,18 +648,26 @@ function EntryCard({
       </div>
 
       <label className="mb-1 block text-xs text-muted">Original</label>
-      <Textarea
-        ref={jpRef}
-        value={entry.japanese}
-        lang="ja"
-        spellCheck={false}
-        placeholder="Japanese"
-        className="min-h-16 bg-surface text-base leading-relaxed"
-        onChange={(e) => onChange(entry.id, { japanese: e.target.value })}
-        onSelect={captureJp}
-        onKeyUp={captureJp}
-        onMouseUp={captureJp}
-      />
+      <div className={entry.regionSrc ? "flex items-start gap-2" : undefined}>
+        {entry.regionSrc ? (
+          <RegionThumb src={entry.regionSrc} label={label} />
+        ) : null}
+        <Textarea
+          ref={jpRef}
+          value={entry.japanese}
+          lang="ja"
+          spellCheck={false}
+          placeholder="Japanese"
+          className={cn(
+            "min-h-16 bg-surface text-base leading-relaxed",
+            entry.regionSrc && "min-h-20 min-w-0 flex-1",
+          )}
+          onChange={(e) => onChange(entry.id, { japanese: e.target.value })}
+          onSelect={captureJp}
+          onKeyUp={captureJp}
+          onMouseUp={captureJp}
+        />
+      </div>
 
       <label className="mt-3 mb-1 block text-xs text-muted">Context</label>
       <Input

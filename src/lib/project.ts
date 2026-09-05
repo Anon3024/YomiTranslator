@@ -16,6 +16,7 @@ const GLOSSARY_V2 = "yomi.glossary.v2";
 const GLOSSARY_V1 = "yomi.glossary.v1";
 const MAX_PAGES = 80;
 const MAX_IMAGE = 8_000_000;
+const REGION_SRC_MAX = 200_000;
 
 export type ProjectFile = {
   kind: typeof PROJECT_KIND;
@@ -166,6 +167,15 @@ function padPage(i: number) {
   return String(i + 1).padStart(3, "0");
 }
 
+function sanitizeRegionSrc(value: unknown): string | undefined {
+  const s = String(value ?? "");
+  if (s.length > REGION_SRC_MAX) return undefined;
+  if (!/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(s.slice(0, 48))) {
+    return undefined;
+  }
+  return s;
+}
+
 export async function saveProjectZip(args: {
   id: string;
   name: string;
@@ -199,6 +209,7 @@ export async function saveProjectZip(args: {
         english: e.english,
         notes: e.notes,
         context: e.context,
+        regionSrc: sanitizeRegionSrc(e.regionSrc),
       })),
     });
   }
@@ -261,6 +272,7 @@ function parseEntries(raw: unknown): LineEntry[] {
       const row = item as Partial<LineEntry>;
       const kind: EntryKind = row?.kind === "detail" ? "detail" : "line";
       const context = String(row?.context ?? "").trim().slice(0, 400);
+      const regionSrc = sanitizeRegionSrc(row?.regionSrc);
       return {
         id: String(row?.id || crypto.randomUUID()),
         kind,
@@ -268,6 +280,7 @@ function parseEntries(raw: unknown): LineEntry[] {
         english: String(row?.english ?? ""),
         notes: row?.notes ? String(row.notes) : undefined,
         context: context || undefined,
+        regionSrc,
       };
     })
     .filter((e) => e.id);

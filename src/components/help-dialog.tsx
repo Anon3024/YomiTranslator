@@ -60,9 +60,11 @@ export function HelpDialog() {
             <p className="text-muted">
               Region is the default tool. Drag a box over one balloon or line,
               then Transcribe. Repeat for the next region — each one becomes
-              its own line. Pan with the Pan tool, Shift-drag, or the middle
-              mouse button. Scroll over the photo to zoom; that does not scroll
-              the page.
+              its own line. A crop of that box sits next to the Japanese so
+              you can correct the reading without scrolling back to the photo.
+              Click the crop to enlarge it. Pan with the Pan tool, Shift-drag,
+              or the middle mouse button. Scroll over the photo to zoom; that
+              does not scroll the page.
             </p>
           </section>
           <section className="space-y-1">
