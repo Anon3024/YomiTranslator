@@ -7,7 +7,7 @@ import { HelpDialog } from "@/components/help-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ApiKeyDialog, ApiKeyGate } from "@/components/api-key-dialog";
 import { ProjectDialog } from "@/components/project-dialog";
-import { encodeRegion, looksLikeImageUrl } from "@/lib/image";
+import { encodeRegion, encodeRegionThumb, looksLikeImageUrl } from "@/lib/image";
 import {
   blobFromDataUrl,
   dataTransferHasImage,
@@ -375,7 +375,8 @@ function Home() {
     setError(null);
     try {
       const el = await waitForImage();
-      const dataUrl = await encodeRegion(el, page.selection);
+      const crop = page.selection;
+      const dataUrl = await encodeRegion(el, crop);
       const res = await transcribeImage({
         data: { imageDataUrl: dataUrl, apiKey: apiKeyRef.current },
       });
@@ -384,13 +385,21 @@ function Home() {
         return;
       }
       const texts =
-        !page.selection && res.data.blocks.length > 1
+        !crop && res.data.blocks.length > 1
           ? res.data.blocks.map((b) => b.text)
           : [res.data.full_text];
+      let regionSrc: string | undefined;
+      if (crop) {
+        try {
+          regionSrc = await encodeRegionThumb(el, crop);
+        } catch {
+          regionSrc = undefined;
+        }
+      }
       const created = texts
         .map((t) => t.trim())
         .filter(Boolean)
-        .map((t) => createEntry(t));
+        .map((t) => createEntry(t, regionSrc ? { regionSrc } : undefined));
       if (created.length === 0) {
         setError(
           res.data.notes ||

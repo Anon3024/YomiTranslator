@@ -2,6 +2,8 @@ import type { Rect } from "./types";
 
 const MAX_EDGE = 2048;
 const MAX_BYTES = 1_700_000;
+const THUMB_EDGE = 320;
+const THUMB_MAX_BYTES = 80_000;
 
 export function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
@@ -58,21 +60,13 @@ async function canvasToJpeg(
   return blob;
 }
 
-export async function encodeRegion(
+async function encodeCrop(
   source: HTMLImageElement,
-  crop: Rect | null,
+  region: Rect,
+  opts: { maxEdge: number; maxBytes: number; quality: number },
 ): Promise<string> {
-  if (!source.naturalWidth || !source.naturalHeight) {
-    throw new Error("Image is not loaded yet");
-  }
-
-  const bounds = { w: source.naturalWidth, h: source.naturalHeight };
-  const region = crop
-    ? normalizeRect(crop, bounds)
-    : { x: 0, y: 0, w: bounds.w, h: bounds.h };
-
-  let scale = Math.min(1, MAX_EDGE / Math.max(region.w, region.h));
-  let quality = 0.84;
+  let scale = Math.min(1, opts.maxEdge / Math.max(region.w, region.h));
+  let quality = opts.quality;
 
   for (let attempt = 0; attempt < 6; attempt++) {
     const dw = Math.max(1, Math.round(region.w * scale));
@@ -96,7 +90,7 @@ export async function encodeRegion(
       dh,
     );
     const blob = await canvasToJpeg(canvas, quality);
-    if (blob.size <= MAX_BYTES) {
+    if (blob.size <= opts.maxBytes) {
       return blobToDataUrl(blob);
     }
     if (quality > 0.55) {
@@ -109,6 +103,42 @@ export async function encodeRegion(
   throw new Error(
     "Image is still too large after compression. Select a smaller region.",
   );
+}
+
+function boundsOf(source: HTMLImageElement) {
+  if (!source.naturalWidth || !source.naturalHeight) {
+    throw new Error("Image is not loaded yet");
+  }
+  return { w: source.naturalWidth, h: source.naturalHeight };
+}
+
+export async function encodeRegion(
+  source: HTMLImageElement,
+  crop: Rect | null,
+): Promise<string> {
+  const bounds = boundsOf(source);
+  const region = crop
+    ? normalizeRect(crop, bounds)
+    : { x: 0, y: 0, w: bounds.w, h: bounds.h };
+  return encodeCrop(source, region, {
+    maxEdge: MAX_EDGE,
+    maxBytes: MAX_BYTES,
+    quality: 0.84,
+  });
+}
+
+/** Small JPEG crop for the transcript line. Requires a drawn region. */
+export async function encodeRegionThumb(
+  source: HTMLImageElement,
+  crop: Rect,
+): Promise<string> {
+  const bounds = boundsOf(source);
+  const region = normalizeRect(crop, bounds);
+  return encodeCrop(source, region, {
+    maxEdge: THUMB_EDGE,
+    maxBytes: THUMB_MAX_BYTES,
+    quality: 0.8,
+  });
 }
 
 export async function createSampleSignBlob(): Promise<Blob> {

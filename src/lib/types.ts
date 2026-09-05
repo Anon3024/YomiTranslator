@@ -38,6 +38,8 @@ export type LineEntry = {
   notes?: string;
   /** Extra situation for Translate / alternatives, e.g. "speaking with a mouth full". */
   context?: string;
+  /** JPEG data URL of the region that was transcribed, for line-by-line proofreading. */
+  regionSrc?: string;
 };
 
 export type Page = {
