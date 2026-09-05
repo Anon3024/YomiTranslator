@@ -26,6 +26,7 @@ import {
   createEntry,
   createPage,
   downloadMarkdown,
+  surroundingLines,
   toMarkdown,
 } from "@/lib/pages";
 import {
@@ -557,6 +558,7 @@ function Home() {
               deeplKey: deeplKeyRef.current,
               provider: translatorRef.current,
               context: entry.context ?? "",
+              nearby: surroundingLines(pagesRef.current, id),
             },
           });
           if (sessionRef.current !== epoch) return;
@@ -610,6 +612,7 @@ function Home() {
           english: entry?.english ?? "",
           selected: word,
           context: context || entry?.context || "",
+          nearby: surroundingLines(pagesRef.current, id),
           apiKey: apiKeyRef.current,
         },
       });

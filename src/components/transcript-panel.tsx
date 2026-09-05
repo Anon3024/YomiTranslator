@@ -19,6 +19,12 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { entriesOf, tokenizeEnglish } from "@/lib/pages";
 import { customsFor, type GlossaryRecord } from "@/lib/glossary";
+import {
+  isPronoun,
+  looksJapanese,
+  pronounAlternatives,
+  shouldRememberAlt,
+} from "@/lib/pronouns";
 import { TranslatorToggle } from "@/components/translator-toggle";
 import type { EntryKind, LineEntry, Page, TranslatorId } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -32,6 +38,7 @@ type AltState = {
   word: string;
   source: string;
   options: string[] | null;
+  pending: boolean;
 };
 
 type Props = {
@@ -120,34 +127,44 @@ export function TranscriptPanel({
     const context = (
       contextOverride !== undefined ? contextOverride : (entry?.context ?? "")
     ).trim();
+    const palette = pronounAlternatives(trimmed);
     setAlt({
       entryId: id,
       start,
       end,
       word: trimmed,
       source: "",
-      options: null,
+      options: palette.length ? palette : null,
+      pending: true,
     });
     try {
       const result = await onAlternatives(id, start, end, trimmed, context);
       const source = result.source.trim();
       const remembered = customsFor(source || trimmed, glossary);
       const merged = [
-        ...remembered.filter((c) => c.toLowerCase() !== trimmed.toLowerCase()),
+        ...palette.filter((c) => c.toLowerCase() !== trimmed.toLowerCase()),
+        ...remembered.filter(
+          (c) =>
+            c.toLowerCase() !== trimmed.toLowerCase() &&
+            !palette.some((p) => p.toLowerCase() === c.toLowerCase()),
+        ),
         ...result.alternatives.filter(
           (c) =>
             c.toLowerCase() !== trimmed.toLowerCase() &&
+            !palette.some((p) => p.toLowerCase() === c.toLowerCase()) &&
             !remembered.some((r) => r.toLowerCase() === c.toLowerCase()),
         ),
       ];
       setAlt((cur) =>
         cur && cur.entryId === id && cur.start === start
-          ? { ...cur, options: merged, source }
+          ? { ...cur, options: merged, source, pending: false }
           : cur,
       );
     } catch {
       setAlt((cur) =>
-        cur && cur.entryId === id ? { ...cur, options: [] } : cur,
+        cur && cur.entryId === id
+          ? { ...cur, options: cur.options ?? [], pending: false }
+          : cur,
       );
     }
   };
@@ -156,11 +173,11 @@ export function TranscriptPanel({
     if (!alt || alt.entryId !== entry.id) return;
     const next =
       entry.english.slice(0, alt.start) + option + entry.english.slice(alt.end);
+    const from = alt.source || alt.word;
     onEntryChange(entry.id, { english: next });
-    onRemember({
-      from: alt.source || alt.word,
-      to: option,
-    });
+    if (shouldRememberAlt(from, option, entry.japanese)) {
+      onRemember({ from, to: option });
+    }
     setAlt(null);
   };
 
@@ -681,8 +698,9 @@ function EntryCard({
             ) : null}
           </p>
           <p className="mt-1 text-xs text-subtle">
-            Suggestions are other English readings of the Japanese, not synonyms
-            of the highlighted English.
+            {isPronoun(alt.word)
+              ? "Other people that fit this line and the rest of the page (Japanese and English). Japanese often omits I/you/he/she/they."
+              : "Suggestions use this line’s Japanese and English, plus nearby lines — not English synonyms of the highlighted word."}
           </p>
           <label className="mt-2 mb-1 block text-xs text-muted">
             Context for this suggestion
@@ -699,7 +717,7 @@ function EntryCard({
               type="button"
               variant="secondary"
               size="sm"
-              disabled={alt.options === null}
+              disabled={alt.pending}
               onClick={() =>
                 onRequestAlts(
                   entry.id,
@@ -710,7 +728,7 @@ function EntryCard({
                 )
               }
             >
-              {alt.options === null ? (
+              {alt.pending ? (
                 <Loader2 className="animate-spin" />
               ) : (
                 <RefreshCw />
@@ -740,34 +758,40 @@ function EntryCard({
           </form>
           {alt.options === null ? (
             <p className="mt-2 text-xs text-subtle">Loading suggestions…</p>
-          ) : alt.options.length === 0 ? (
-            <p className="mt-2 text-xs text-subtle">
-              No suggestions. Type your own above — it is saved to this
-              project's dictionary against the original Japanese.
-            </p>
           ) : (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {alt.options.map((option) => (
-                <Button
-                  key={option}
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => onApplyAlt(entry, option)}
-                >
-                  {option}
-                </Button>
-              ))}
-            </div>
+            <>
+              {alt.options.length === 0 ? (
+                <p className="mt-2 text-xs text-subtle">
+                  {isPronoun(alt.word) && !alt.source
+                    ? "Type your own above — a pronoun-only change stays on this line, not the dictionary."
+                    : "No suggestions. Type your own above — it is saved to this project's dictionary against the original Japanese."}
+                </p>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {alt.options.map((option) => (
+                    <Button
+                      key={option}
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onApplyAlt(entry, option)}
+                    >
+                      {option}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              {alt.pending ? (
+                <p className="mt-2 text-xs text-subtle">
+                  Looking at the rest of this page…
+                </p>
+              ) : null}
+            </>
           )}
         </div>
       ) : null}
     </article>
   );
-}
-
-function looksJapanese(value: string) {
-  return /[\u3040-\u30ff\u3400-\u9fff]/.test(value);
 }
 
 function DictionarySection({

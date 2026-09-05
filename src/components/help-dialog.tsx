@@ -80,7 +80,9 @@ export function HelpDialog() {
               to a queue — they run one after another. If a DeepL key is
               saved, choose Grok or DeepL with the Translate with control.
               The English box is always editable. A line with Context set is
-              sent to Grok so the English can follow that situation.
+              sent to Grok so the English can follow that situation. Grok also
+              reads nearby lines in Japanese and English when guessing a
+              person.
             </p>
           </section>
           <section className="space-y-1">
@@ -98,11 +100,12 @@ export function HelpDialog() {
             <h3 className="font-medium">Custom wording</h3>
             <p className="text-muted">
               Click a word in the English line for other readings of the
-              original Japanese (not English synonyms). The original kanji or
-              phrase is shown with the options. Type your own English if
-              needed. That Japanese → English pair is saved to this project’s
-              dictionary, not the whole line. Suggest again after changing
-              Context.
+              original Japanese. Suggestions also read this line and nearby
+              lines in both Japanese and English, so a vague or omitted person
+              can be I, you, he, she, or they without a character list. Pronoun
+              chips appear immediately. A pronoun-only swap stays on this line;
+              a Japanese term (奴, お前, a name) is saved to the project
+              dictionary. Suggest again after changing Context.
             </p>
           </section>
           <section className="space-y-1">
