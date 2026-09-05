@@ -41,6 +41,13 @@ type Drag =
 
 type Handle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
+/** True from pointer-down on the photo until drop/dragend, so a resize cannot file-drop the image. */
+let dropLock = false;
+
+export function shouldIgnorePageDrop() {
+  return dropLock;
+}
+
 const HANDLE_CURSOR: Record<Handle, string> = {
   n: "ns-resize",
   s: "ns-resize",
@@ -51,6 +58,37 @@ const HANDLE_CURSOR: Record<Handle, string> = {
   nw: "nwse-resize",
   se: "nwse-resize",
 };
+
+const HANDLE_PX = 14;
+
+function hitHandle(
+  ix: number,
+  iy: number,
+  sel: Rect,
+  zoom: number,
+): Handle | null {
+  const t = Math.max(HANDLE_PX / Math.max(zoom, 0.08), 4);
+  const x1 = sel.x;
+  const y1 = sel.y;
+  const x2 = sel.x + sel.w;
+  const y2 = sel.y + sel.h;
+  const nearL = Math.abs(ix - x1) <= t;
+  const nearR = Math.abs(ix - x2) <= t;
+  const nearT = Math.abs(iy - y1) <= t;
+  const nearB = Math.abs(iy - y2) <= t;
+  const inX = ix >= x1 - t && ix <= x2 + t;
+  const inY = iy >= y1 - t && iy <= y2 + t;
+  if (!inX || !inY) return null;
+  if (nearT && nearL) return "nw";
+  if (nearT && nearR) return "ne";
+  if (nearB && nearL) return "sw";
+  if (nearB && nearR) return "se";
+  if (nearT) return "n";
+  if (nearB) return "s";
+  if (nearL) return "w";
+  if (nearR) return "e";
+  return null;
+}
 
 type Props = {
   src: string | null;
@@ -115,6 +153,7 @@ export function ImageStage({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [nat, setNat] = useState({ w: 0, h: 0 });
   const [urlValue, setUrlValue] = useState("");
+  const [hoverHandle, setHoverHandle] = useState<Handle | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const addRef = useRef<HTMLInputElement>(null);
   const fittedFor = useRef<string | null>(null);
@@ -189,6 +228,31 @@ export function ImageStage({
     };
   }, [src, view]);
 
+  useEffect(() => {
+    const blockNativeDrag = (e: DragEvent) => {
+      if (view === "reorder") return;
+      const vp = viewportRef.current;
+      const target = e.target as Node | null;
+      if (dropLock || (vp && target && vp.contains(target))) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = "none";
+          e.dataTransfer.dropEffect = "none";
+        }
+      }
+    };
+    const release = () => {
+      dropLock = false;
+    };
+    document.addEventListener("dragstart", blockNativeDrag, true);
+    window.addEventListener("dragend", release);
+    return () => {
+      document.removeEventListener("dragstart", blockNativeDrag, true);
+      window.removeEventListener("dragend", release);
+    };
+  }, [view]);
+
   const clientToImage = (cx: number, cy: number) => {
     const vp = viewportRef.current;
     if (!vp) return { x: 0, y: 0 };
@@ -216,10 +280,20 @@ export function ImageStage({
     return normalizeRect({ x, y, w, h }, nat);
   };
 
+  const endGesture = () => {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    setHoverHandle(null);
+    if (drag?.kind === "draw" && selection && (selection.w < 8 || selection.h < 8)) {
+      onSelectionChange(null);
+    }
+  };
+
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!src || view === "reorder") return;
+    e.preventDefault();
+    dropLock = true;
     if (e.button === 1) {
-      e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
       dragRef.current = {
         kind: "pan",
@@ -232,7 +306,6 @@ export function ImageStage({
     }
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    const handle = target.dataset.handle as Handle | undefined;
     const { x, y } = clientToImage(e.clientX, e.clientY);
     e.currentTarget.setPointerCapture(e.pointerId);
 
@@ -247,6 +320,9 @@ export function ImageStage({
       return;
     }
 
+    const fromDom = target.dataset.handle as Handle | undefined;
+    const handle =
+      fromDom || (selection ? hitHandle(x, y, selection, zoom) : null);
     if (handle && selection) {
       dragRef.current = {
         kind: "resize",
@@ -255,6 +331,7 @@ export function ImageStage({
         iy: y,
         orig: selection,
       };
+      setHoverHandle(handle);
       return;
     }
 
@@ -275,7 +352,13 @@ export function ImageStage({
 
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
-    if (!drag) return;
+    if (!drag) {
+      if (src && view === "page" && tool === "region" && selection) {
+        const pt = clientToImage(e.clientX, e.clientY);
+        setHoverHandle(hitHandle(pt.x, pt.y, selection, zoom));
+      }
+      return;
+    }
     if (drag.kind === "pan") {
       setPan({
         x: drag.ox + (e.clientX - drag.sx),
@@ -311,12 +394,27 @@ export function ImageStage({
   };
 
   const onPointerUp = () => {
-    const drag = dragRef.current;
-    dragRef.current = null;
-    if (drag?.kind === "draw" && selection && (selection.w < 8 || selection.h < 8)) {
-      onSelectionChange(null);
-    }
+    endGesture();
+    window.setTimeout(() => {
+      dropLock = false;
+    }, 50);
   };
+
+  const onPointerCancel = () => {
+    endGesture();
+    window.setTimeout(() => {
+      dropLock = false;
+    }, 400);
+  };
+
+  const stageCursor =
+    src && view === "page"
+      ? hoverHandle
+        ? HANDLE_CURSOR[hoverHandle]
+        : tool === "pan"
+          ? "grab"
+          : "crosshair"
+      : undefined;
 
   return (
     <section className="flex min-h-0 flex-col rounded-3xl bg-surface p-2 pb-4 shadow-[var(--shadow-border)]">
@@ -325,23 +423,29 @@ export function ImageStage({
         className={cn(
           "stage-frame relative flex-1 overscroll-none rounded-2xl bg-surface-inset",
           src && view === "page" ? "overflow-hidden" : "overflow-y-auto",
-          src && view === "page" ? "cursor-crosshair" : "",
-          tool === "pan" && src && view === "page" ? "cursor-grab" : "",
         )}
         tabIndex={0}
-        style={{ touchAction: view === "reorder" || !src ? "auto" : "none" }}
+        style={{
+          touchAction: view === "reorder" || !src ? "auto" : "none",
+          cursor: stageCursor,
+        }}
         onPointerDown={src && view === "page" ? onPointerDown : undefined}
         onPointerMove={src && view === "page" ? onPointerMove : undefined}
         onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
+        onPointerCancel={onPointerCancel}
+        onDragStart={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
         onDragOver={(e) => {
           if (view === "reorder") return;
           e.preventDefault();
-          e.dataTransfer.dropEffect = "copy";
+          e.dataTransfer.dropEffect = dropLock ? "none" : "copy";
         }}
         onDrop={(e) => {
           if (view === "reorder") return;
           e.preventDefault();
+          e.stopPropagation();
         }}
       >
         {!src ? (
@@ -364,6 +468,8 @@ export function ImageStage({
           <>
             <div
               className="absolute left-0 top-0 origin-top-left will-change-transform"
+              draggable={false}
+              onDragStart={(e) => e.preventDefault()}
               style={{
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
               }}
@@ -374,11 +480,13 @@ export function ImageStage({
                 alt="Source"
                 draggable={false}
                 onLoad={onImageReady}
-                className="block max-w-none select-none outline outline-1 -outline-offset-1 outline-fg/10"
+                onDragStart={(e) => e.preventDefault()}
+                className="pointer-events-none block max-w-none select-none outline outline-1 -outline-offset-1 outline-fg/10"
               />
               {selection && nat.w > 0 ? (
                 <div
                   className="absolute box-border border-2 border-accent bg-accent/10 shadow-[0_0_0_9999px_rgba(28,27,24,0.45)]"
+                  draggable={false}
                   style={{
                     left: selection.x,
                     top: selection.y,
@@ -401,13 +509,17 @@ export function ImageStage({
                     <span
                       key={h}
                       data-handle={h}
-                      className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-sm bg-surface shadow-[var(--shadow-border)]"
+                      draggable={false}
+                      className="absolute z-10 flex size-11 items-center justify-center"
                       style={{
                         left,
                         top,
                         cursor: HANDLE_CURSOR[h],
+                        transform: `translate(-50%, -50%) scale(${1 / Math.max(zoom, 0.08)})`,
                       }}
-                    />
+                    >
+                      <span className="pointer-events-none size-2.5 rounded-sm bg-surface shadow-[var(--shadow-border)]" />
+                    </span>
                   ))}
                 </div>
               ) : null}

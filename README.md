@@ -12,11 +12,11 @@ It does **not** ship an API key. You paste your own [xAI](https://docs.x.ai) key
 
 - Add pages by drop, paste, file picker, or image URL
 - Crop a region so OCR sees only the balloon, sign, or line you selected
-- A crop of that region sits next to the Japanese line for proofreading; click to enlarge
+- A crop of that region sits to the left of the line for proofreading; click to enlarge
 - Multi-page session with left/right navigation
 - Re-order pages in a grid (drag or arrows). Regions are off in that view
 - Lines vs SFX/detail: dialogue stays a Line; signs, tattoos, and sound effects can be marked SFX
-- Translate one line or queue a whole page. Calls run one after another
+- Translate one line or queue a whole page. Calls run one after another; a timeout skips that line and the rest of the queue keeps going
 - Optional DeepL key: switch Translate between Grok and DeepL
 - Click a word in the English for other readings of the original Japanese, or type a custom phrasing. Person words (I/you/he/she/they) also offer other pronouns, using this line and nearby lines in both languages
 - Optional per-line context (situation or delivery, e.g. speaking with a mouth full) for Translate and alternatives
@@ -48,7 +48,7 @@ DeepL is used only for Translate / Translate page. Word alternatives still use G
 
 ## Projects
 
-A project is one Yomi session: the page images, in-progress translations, and that project’s dictionary. API keys and theme stay in the browser and are reused.
+A project is one Yomi session: the page images, in-progress translations, and that project’s dictionary. Opening Yomi always starts a new Untitled project. API keys and theme stay in the browser and are reused.
 
 1. Open the folder icon. Name the project.
 2. **Save** downloads a zip folder (`Name.zip`) with `project.json` and `images/`.
@@ -60,9 +60,9 @@ The dictionary is not shared between projects. Saved zips keep that project’s 
 ## How to use
 
 1. Drop, paste, or choose a photo. Add more pages if you have a sequence.
-2. **Region** is the default tool. Drag a box over one balloon or line, then **Transcribe**. Repeat for the next region. A crop of the box appears next to the Japanese line — click it to enlarge.
+2. **Region** is the default tool. Drag a box over one balloon or line, then **Transcribe**. Repeat for the next region. A crop of the box appears to the left of the line — click it to enlarge.
 3. Edit the Japanese if the reading is off, using the crop as a reference.
-4. **Translate** one line, or **Translate page** for every empty line. Further clicks while one is running add them to the queue.
+4. **Translate** one line, or **Translate page** for every empty line. Further clicks while one is running add them to the queue. A timed-out line is skipped; the rest of the queue keeps going.
 5. Click an English word for other readings of the original Japanese (shown next to the options), or type your own English. Person words also offer I / you / he / she / they, using this line and nearby lines in both languages. A Japanese term is saved to this project’s dictionary; a pronoun-only swap is not.
 6. Use **Context** on a line when the situation matters (mouth full, whisper, drunk). Translate and alternatives follow it. **Suggest again** after you change it.
 7. Mark background text and sound effects as **SFX** so they export in a separate section.
@@ -156,7 +156,7 @@ app-builder-workspace-macos`) to allow it.
 ## Privacy and use
 
 - Images stay in this session. They are not uploaded to a Yomi server for storage.
-- The current project’s dictionary and API keys live in this browser only. Saved projects are zip files on your machine.
+- The current project’s dictionary lives with that session; API keys live in this browser only. Saved projects are zip files on your machine. Opening Yomi starts a new Untitled project.
 - Use only material you have a right to read.
 - Do not upload sexual content involving anyone under 18, including drawings, or intimate images of real people.
 
