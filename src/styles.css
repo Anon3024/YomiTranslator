@@ -118,6 +118,14 @@
 @layer utilities {
   .stage-frame {
     min-height: min(52vh, 30rem);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .stage-frame img {
+    -webkit-user-drag: none;
+    user-select: none;
+    pointer-events: none;
   }
 
   .stage-wrap {

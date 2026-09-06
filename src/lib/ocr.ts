@@ -8,7 +8,7 @@ import {
 
 type FnResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: string; declined?: boolean };
+  | { ok: false; error: string; declined?: boolean; timedOut?: boolean };
 
 const BLOCKED_HOST =
   /^(localhost|metadata\.google\.internal|metadata|.*\.(local|internal|localhost))$/i;
@@ -41,6 +41,14 @@ function assertSafeImageUrl(raw: string) {
     throw new Error("That address cannot be fetched.");
   }
   return url;
+}
+
+function isTimeoutErr(err: unknown) {
+  if (!err || typeof err !== "object") return false;
+  const name = "name" in err ? String(err.name) : "";
+  const message = "message" in err ? String(err.message) : "";
+  if (name === "TimeoutError" || name === "AbortError") return true;
+  return /timed? ?out|aborted due to timeout/i.test(message);
 }
 
 async function fetchFollow(url: URL, hops = 0): Promise<Response> {
@@ -153,7 +161,14 @@ async function deeplTranslate(
         }),
         signal: AbortSignal.timeout(60_000),
       });
-    } catch {
+    } catch (err) {
+      if (isTimeoutErr(err)) {
+        return {
+          ok: false,
+          timedOut: true,
+          error: "DeepL timed out. Try again.",
+        };
+      }
       lastError = "Could not reach DeepL. Try again.";
       continue;
     }
@@ -223,21 +238,36 @@ async function grokChat(args: {
   max_tokens: number;
   temperature?: number;
 }): Promise<FnResult<string>> {
-  const res = await fetch("https://api.x.ai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${args.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "grok-4.5",
-      messages: args.messages,
-      temperature: args.temperature ?? 0,
-      max_tokens: args.max_tokens,
-      response_format: { type: "json_object" },
-    }),
-    signal: AbortSignal.timeout(90_000),
-  });
+  let res: Response;
+  try {
+    res = await fetch("https://api.x.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${args.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "grok-4.5",
+        messages: args.messages,
+        temperature: args.temperature ?? 0,
+        max_tokens: args.max_tokens,
+        response_format: { type: "json_object" },
+      }),
+      signal: AbortSignal.timeout(90_000),
+    });
+  } catch (err) {
+    if (isTimeoutErr(err)) {
+      return {
+        ok: false,
+        timedOut: true,
+        error: "The request timed out. Try again.",
+      };
+    }
+    return {
+      ok: false,
+      error: "Could not reach the service. Try again.",
+    };
+  }
 
   let body: GrokChatResponse | null = null;
   try {

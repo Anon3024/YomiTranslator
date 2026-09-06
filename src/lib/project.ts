@@ -82,6 +82,16 @@ function migrateOldGlossary(): GlossaryRecord[] {
   return [];
 }
 
+export function startSession(): ProjectSession {
+  const session: ProjectSession = {
+    id: newProjectId(),
+    name: DEFAULT_PROJECT_NAME,
+    glossary: [],
+  };
+  saveSession(session);
+  return session;
+}
+
 export function loadSession(): ProjectSession {
   const raw = readStorage(SESSION_KEY);
   if (raw) {

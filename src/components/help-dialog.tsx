@@ -25,11 +25,12 @@ export function HelpDialog() {
           <section className="space-y-1">
             <h3 className="font-medium">Projects</h3>
             <p className="text-muted">
-              The folder icon opens the current project. Name it, then Save to
-              download a zip folder of the pages, translations, and this
-              project’s dictionary. Load opens a saved zip. New starts a blank
-              project. API keys are kept; the dictionary is not shared between
-              projects.
+              The folder icon opens the current project. Opening Yomi always
+              starts a new Untitled project — Load a saved zip to continue
+              previous work. Name it, then Save to download a zip folder of the
+              pages, translations, and this project’s dictionary. New starts a
+              blank project. API keys are kept; the dictionary is not shared
+              between projects.
             </p>
           </section>
           <section className="space-y-1">
@@ -60,7 +61,7 @@ export function HelpDialog() {
             <p className="text-muted">
               Region is the default tool. Drag a box over one balloon or line,
               then Transcribe. Repeat for the next region — each one becomes
-              its own line. A crop of that box sits next to the Japanese so
+              its own line. A crop of that box sits to the left of the line so
               you can correct the reading without scrolling back to the photo.
               Click the crop to enlarge it. Pan with the Pan tool, Shift-drag,
               or the middle mouse button. Scroll over the photo to zoom; that
@@ -79,8 +80,11 @@ export function HelpDialog() {
             <p className="text-muted">
               Translate one line, or Translate page for every empty line.
               Clicking Translate on more lines while one is running adds them
-              to a queue — they run one after another. If a DeepL key is
-              saved, choose Grok or DeepL with the Translate with control.
+              to a queue — they run one after another. Waiting in the queue
+              does not count against a line’s time limit. If one line times
+              out, a notice appears and the rest of the queue keeps going.
+              If a DeepL key is saved, choose Grok or DeepL with the Translate
+              with control.
               The English box is always editable. A line with Context set is
               sent to Grok so the English can follow that situation. Grok also
               reads nearby lines in Japanese and English when guessing a

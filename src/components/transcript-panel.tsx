@@ -195,8 +195,8 @@ export function TranscriptPanel({
             {page ? `Page ${pageNumber}` : "Transcript"}
           </h2>
           <p className="mt-1 text-sm text-muted">
-            Draw a region and transcribe to add a line. The crop sits next to
-            the Japanese so you can correct it without scrolling.
+            Draw a region and transcribe to add a line. The crop sits to the
+            left of the line so you can correct it without scrolling.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -597,8 +597,12 @@ function EntryCard({
   };
 
   return (
-    <article className="rounded-xl bg-bg-warm p-3 shadow-[var(--shadow-border)]">
-      <div className="mb-2 flex flex-wrap items-center gap-1">
+    <article className="flex items-start gap-3 rounded-xl bg-bg-warm p-3 shadow-[var(--shadow-border)]">
+      {entry.regionSrc ? (
+        <RegionThumb src={entry.regionSrc} label={label} />
+      ) : null}
+      <div className="min-w-0 flex-1">
+        <div className="mb-2 flex flex-wrap items-center gap-1">
         <span className="mr-auto text-xs font-medium text-muted">{label}</span>
         <Button
           type="button"
@@ -648,26 +652,18 @@ function EntryCard({
       </div>
 
       <label className="mb-1 block text-xs text-muted">Original</label>
-      <div className={entry.regionSrc ? "flex items-start gap-2" : undefined}>
-        {entry.regionSrc ? (
-          <RegionThumb src={entry.regionSrc} label={label} />
-        ) : null}
-        <Textarea
-          ref={jpRef}
-          value={entry.japanese}
-          lang="ja"
-          spellCheck={false}
-          placeholder="Japanese"
-          className={cn(
-            "min-h-16 bg-surface text-base leading-relaxed",
-            entry.regionSrc && "min-h-20 min-w-0 flex-1",
-          )}
-          onChange={(e) => onChange(entry.id, { japanese: e.target.value })}
-          onSelect={captureJp}
-          onKeyUp={captureJp}
-          onMouseUp={captureJp}
-        />
-      </div>
+      <Textarea
+        ref={jpRef}
+        value={entry.japanese}
+        lang="ja"
+        spellCheck={false}
+        placeholder="Japanese"
+        className="min-h-16 bg-surface text-base leading-relaxed"
+        onChange={(e) => onChange(entry.id, { japanese: e.target.value })}
+        onSelect={captureJp}
+        onKeyUp={captureJp}
+        onMouseUp={captureJp}
+      />
 
       <label className="mt-3 mb-1 block text-xs text-muted">Context</label>
       <Input
@@ -844,6 +840,7 @@ function EntryCard({
           )}
         </div>
       ) : null}
+      </div>
     </article>
   );
 }

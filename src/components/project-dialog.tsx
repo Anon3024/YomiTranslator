@@ -73,7 +73,8 @@ export function ProjectDialog({
         <DialogTitle>Project</DialogTitle>
         <DialogDescription>
           A project is a fresh Yomi session: pages, translations, and this
-          project’s dictionary. API keys stay in the browser. Save downloads a
+          project’s dictionary. Opening Yomi always starts Untitled — Load a
+          saved zip to continue. API keys stay in the browser. Save downloads a
           zip folder you can load later.
         </DialogDescription>
         <div className="mt-4 space-y-4">

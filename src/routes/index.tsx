@@ -1,12 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ImageStage } from "@/components/image-stage";
+import { ImageStage, shouldIgnorePageDrop } from "@/components/image-stage";
 import { TranscriptPanel } from "@/components/transcript-panel";
 import { HelpDialog } from "@/components/help-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ApiKeyDialog, ApiKeyGate } from "@/components/api-key-dialog";
 import { ProjectDialog } from "@/components/project-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { encodeRegion, encodeRegionThumb, looksLikeImageUrl } from "@/lib/image";
 import {
   blobFromDataUrl,
@@ -48,12 +55,11 @@ import {
   DEFAULT_PROJECT_NAME,
   downloadNameFor,
   loadProjectZip,
-  loadSession,
   looksLikeProjectFile,
   newProjectId,
   saveProjectZip,
   saveSession,
-  sanitizeProjectName,
+  startSession,
 } from "@/lib/project";
 import { applyTheme, readTheme, type Theme } from "@/lib/theme";
 import {
@@ -67,6 +73,39 @@ import {
 
 export const Route = createFileRoute("/")({ component: Home });
 
+function isTimeoutError(err: unknown) {
+  if (!err || typeof err !== "object") return false;
+  const name = "name" in err ? String(err.name) : "";
+  const message = "message" in err ? String(err.message) : "";
+  if (name === "TimeoutError" || name === "AbortError") return true;
+  return /timed? ?out|aborted due to timeout|504|408|etimedout|deadline/i.test(
+    message,
+  );
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const err = new Error("The request timed out. Try again.");
+      err.name = "TimeoutError";
+      reject(err);
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+/** Per in-flight translate only — waiting queue items do not share this clock. */
+const TRANSLATE_TIMEOUT_MS = 100_000;
+
 function Home() {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const pagesRef = useRef<Page[]>([]);
@@ -78,10 +117,14 @@ function Home() {
   const [translatingId, setTranslatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [boot] = useState(loadSession);
+  const [boot] = useState(startSession);
   const [glossary, setGlossary] = useState<GlossaryRecord[]>(boot.glossary);
   const [theme, setThemeState] = useState<Theme>("light");
   const [queueIds, setQueueIds] = useState<string[]>([]);
+  const [timeoutNotice, setTimeoutNotice] = useState<{
+    labels: string[];
+    remaining: number;
+  } | null>(null);
   const [apiKey, setApiKeyState] = useState(loadApiKey);
   const [deeplKey, setDeeplKeyState] = useState(loadDeeplKey);
   const [translator, setTranslatorState] = useState<TranslatorId>(loadTranslator);
@@ -545,6 +588,17 @@ function Home() {
       }
       return null;
     };
+    const labelFor = (id: string) => {
+      for (const p of pagesRef.current) {
+        const lines = p.entries.filter((e) => e.kind === "line");
+        const details = p.entries.filter((e) => e.kind === "detail");
+        const li = lines.findIndex((e) => e.id === id);
+        if (li >= 0) return `Line ${li + 1}`;
+        const di = details.findIndex((e) => e.id === id);
+        if (di >= 0) return `Detail ${di + 1}`;
+      }
+      return "This line";
+    };
     const patch = (id: string, data: Partial<LineEntry>) => {
       setPages((prev) =>
         prev.map((p) => ({
@@ -553,57 +607,86 @@ function Home() {
         })),
       );
     };
-    while (queueRef.current.length) {
-      const id = queueRef.current[0];
-      setTranslatingId(id);
-      const entry = find(id);
-      try {
-        if (entry?.japanese.trim()) {
-          const res = await translateText({
-            data: {
-              text: entry.japanese,
-              glossary: glossaryPayload(glossaryRef.current),
-              apiKey: apiKeyRef.current,
-              deeplKey: deeplKeyRef.current,
-              provider: translatorRef.current,
-              context: entry.context ?? "",
-              nearby: surroundingLines(pagesRef.current, id),
-            },
-          });
-          if (sessionRef.current !== epoch) return;
-          if (!res.ok) {
-            if (res.declined) {
-              patch(id, { english: REJECTED_TRANSLATION });
+    const noteTimeout = (id: string, remaining: number) => {
+      const label = labelFor(id);
+      setTimeoutNotice((prev) => ({
+        labels: prev
+          ? [...prev.labels.filter((l) => l !== label), label]
+          : [label],
+        remaining,
+      }));
+    };
+    try {
+      while (queueRef.current.length) {
+        if (sessionRef.current !== epoch) return;
+        const id = queueRef.current[0];
+        setTranslatingId(id);
+        const entry = find(id);
+        try {
+          if (entry?.japanese.trim()) {
+            const res = await withTimeout(
+              translateText({
+                data: {
+                  text: entry.japanese,
+                  glossary: glossaryPayload(glossaryRef.current),
+                  apiKey: apiKeyRef.current,
+                  deeplKey: deeplKeyRef.current,
+                  provider: translatorRef.current,
+                  context: entry.context ?? "",
+                  nearby: surroundingLines(pagesRef.current, id),
+                },
+              }),
+              TRANSLATE_TIMEOUT_MS,
+            );
+            if (sessionRef.current !== epoch) return;
+            if (!res.ok) {
+              if (res.declined) {
+                patch(id, { english: REJECTED_TRANSLATION });
+              } else if (res.timedOut || isTimeoutError({ message: res.error })) {
+                noteTimeout(id, Math.max(0, queueRef.current.length - 1));
+              } else {
+                setError(res.error);
+                queueRef.current = [];
+                setQueueIds([]);
+                break;
+              }
             } else {
-              setError(res.error);
+              const translation = res.data.translation.trim();
+              patch(id, {
+                english:
+                  translation === REJECTED_TRANSLATION
+                    ? REJECTED_TRANSLATION
+                    : applyGlossary(
+                        entry.japanese,
+                        translation,
+                        glossaryRef.current,
+                      ),
+                notes: res.data.notes,
+              });
             }
+          }
+        } catch (err) {
+          if (sessionRef.current !== epoch) return;
+          if (isTimeoutError(err)) {
+            noteTimeout(id, Math.max(0, queueRef.current.length - 1));
           } else {
-            const translation = res.data.translation.trim();
-            patch(id, {
-              english:
-                translation === REJECTED_TRANSLATION
-                  ? REJECTED_TRANSLATION
-                  : applyGlossary(
-                      entry.japanese,
-                      translation,
-                      glossaryRef.current,
-                    ),
-              notes: res.data.notes,
-            });
+            setError(err instanceof Error ? err.message : "Translation failed.");
+            queueRef.current = [];
+            setQueueIds([]);
+            break;
           }
         }
-      } catch (err) {
         if (sessionRef.current !== epoch) return;
-        setError(err instanceof Error ? err.message : "Translation failed.");
+        queueRef.current = queueRef.current.slice(1);
+        setQueueIds([...queueRef.current]);
       }
-      if (sessionRef.current !== epoch) return;
-      queueRef.current = queueRef.current.slice(1);
-      setQueueIds([...queueRef.current]);
+    } finally {
+      if (sessionRef.current === epoch) {
+        setTranslatingId(null);
+        setTranslating(false);
+        drainingRef.current = false;
+      }
     }
-    if (sessionRef.current !== epoch) return;
-    setTranslatingId(null);
-    setTranslating(false);
-    drainingRef.current = false;
   }, []);
 
   const runAlternatives = useCallback(
@@ -735,6 +818,10 @@ function Home() {
     const onOver = (e: DragEvent) => {
       if (!hasFiles(e)) return;
       e.preventDefault();
+      if (shouldIgnorePageDrop()) {
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "none";
+        return;
+      }
       if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
       setDragging(true);
     };
@@ -746,11 +833,7 @@ function Home() {
     const onDrop = (e: DragEvent) => {
       e.preventDefault();
       setDragging(false);
-      const files = filesFromDataTransfer(e.dataTransfer);
-      if (files.length) {
-        if (addFiles(files)) toast("Image added");
-        return;
-      }
+      if (shouldIgnorePageDrop()) return;
       const uri = (
         e.dataTransfer?.getData("text/uri-list") ||
         e.dataTransfer?.getData("text/plain") ||
@@ -759,6 +842,14 @@ function Home() {
         .trim()
         .split("\n")[0]
         ?.trim();
+      if (uri && (uri.startsWith("blob:") || uri.startsWith("data:"))) {
+        return;
+      }
+      const files = filesFromDataTransfer(e.dataTransfer);
+      if (files.length) {
+        if (addFiles(files)) toast("Image added");
+        return;
+      }
       if (uri && looksLikeImageUrl(uri)) void loadUrl(uri);
     };
     window.addEventListener("dragover", onOver);
@@ -961,6 +1052,36 @@ function Home() {
           onTranslator={setTranslator}
         />
       </div>
+      <Dialog
+        open={Boolean(timeoutNotice)}
+        onOpenChange={(open) => {
+          if (!open) setTimeoutNotice(null);
+        }}
+      >
+        <DialogContent>
+          <DialogTitle>Translation timed out</DialogTitle>
+          <DialogDescription>
+            {timeoutNotice
+              ? `${
+                  timeoutNotice.labels.length === 1
+                    ? `${timeoutNotice.labels[0]} took too long and was skipped.`
+                    : `${timeoutNotice.labels.join(", ")} took too long and were skipped.`
+                }${
+                  timeoutNotice.remaining > 0
+                    ? ` ${timeoutNotice.remaining} other ${
+                        timeoutNotice.remaining === 1 ? "line is" : "lines are"
+                      } still queued and will keep translating.`
+                    : " You can press Translate on that line to try again."
+                }`
+              : ""}
+          </DialogDescription>
+          <div className="mt-4">
+            <Button type="button" onClick={() => setTimeoutNotice(null)}>
+              OK
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
