@@ -14,8 +14,6 @@ const NAME_KEY = "yomi.project-name";
 const SESSION_KEY = "yomi.session.v1";
 const GLOSSARY_V2 = "yomi.glossary.v2";
 const GLOSSARY_V1 = "yomi.glossary.v1";
-const MAX_PAGES = 80;
-const MAX_IMAGE = 8_000_000;
 const REGION_SRC_MAX = 200_000;
 
 export type ProjectFile = {
@@ -194,9 +192,6 @@ export async function saveProjectZip(args: {
   pageIndex: number;
 }) {
   const name = sanitizeProjectName(args.name);
-  if (args.pages.length > MAX_PAGES) {
-    throw new Error(`A project can have at most ${MAX_PAGES} pages.`);
-  }
   const folder = folderNameFor(name);
   const pageMeta: ProjectFile["pages"] = [];
   const entries: { name: string; data: Uint8Array }[] = [];
@@ -205,9 +200,6 @@ export async function saveProjectZip(args: {
     const page = args.pages[i];
     const image = `images/${padPage(i)}.png`;
     const bytes = await srcToPngBytes(page.src);
-    if (bytes.byteLength > MAX_IMAGE) {
-      throw new Error(`Page ${i + 1} is larger than 8 MB.`);
-    }
     entries.push({ name: `${folder}/${image}`, data: bytes });
     pageMeta.push({
       id: page.id,
@@ -318,9 +310,6 @@ export async function loadProjectZip(
     throw new Error("That project was saved with a newer Yomi.");
   }
   const pagesIn = Array.isArray(parsed.pages) ? parsed.pages : [];
-  if (pagesIn.length > MAX_PAGES) {
-    throw new Error(`A project can have at most ${MAX_PAGES} pages.`);
-  }
   const root = dirOf(normalizeZipPath(jsonFile.name));
   const byName = new Map(
     files.map((f) => [normalizeZipPath(f.name), f.data]),
@@ -334,9 +323,6 @@ export async function loadProjectZip(
     const full = `${root}${rel}`;
     const data = byName.get(full);
     if (!data) throw new Error(`Missing image ${rel}.`);
-    if (data.byteLength > MAX_IMAGE) {
-      throw new Error("An image in that project is larger than 8 MB.");
-    }
     const copy = new Uint8Array(data.byteLength);
     copy.set(data);
     const blob = new Blob([copy.buffer], { type: "image/png" });
